@@ -1,0 +1,6 @@
+{
+  "name": "CAST SolarPro - Propostas & CRM Solar",
+  "description": "App PWA da CAST para dimensionamento fotovoltaico, orçamentos, propostas em PDF, assinaturas digitais, histórico de pagamentos, CRM com follow-up e relatórios de desempenho.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
