@@ -63,6 +63,8 @@ export interface SizingInput {
   roofType: RoofType;
   connectionType: ConnectionType;
   monthlyAverageKwh: number;
+  directSystemPowerKwp?: number; // Preenchido pelo técnico se quiser definir a potência diretamente em kWp
+  directModuleQuantity?: number; // Preenchido pelo técnico se quiser definir a quantidade de placas diretamente
   tariffRate: number; // R$/kWh
   cipRate: number; // Iluminação pública R$
   customHsp?: number; // Horas de Sol Pleno
@@ -78,6 +80,8 @@ export interface SizingInput {
   customElectricalKitCost?: number;
   customHomologationCost?: number;
   customMarginPercent?: number;
+  billPhoto?: string;
+  photos?: string[];
 }
 
 export interface MonthlyData {
@@ -195,6 +199,10 @@ export interface SolarProposal {
 
   // Notes
   internalNotes?: string;
+
+  // Attached Photos (Conta de luz, telhado, local da instalação)
+  billPhoto?: string;
+  photos?: string[];
 }
 
 export interface StateSolarData {

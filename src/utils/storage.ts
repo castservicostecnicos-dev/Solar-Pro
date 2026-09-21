@@ -1,5 +1,28 @@
-import { SolarProposal, FollowUpActivity, DigitalSignatureData, PaymentInstallment, AppUser, AccessLog, SolarModule, SolarInverter } from '../types';
-import { INITIAL_SAMPLE_PROPOSALS, AVAILABLE_MODULES, AVAILABLE_INVERTERS } from '../data/solarDefaults';
+import { 
+  SolarProposal, 
+  FollowUpActivity, 
+  DigitalSignatureData, 
+  PaymentInstallment, 
+  AppUser, 
+  AccessLog, 
+  SolarModule, 
+  SolarInverter 
+} from '../types';
+import { 
+  INITIAL_SAMPLE_PROPOSALS, 
+  AVAILABLE_MODULES, 
+  AVAILABLE_INVERTERS 
+} from '../data/solarDefaults';
+import { db } from '../lib/firebase';
+import { 
+  collection, 
+  doc, 
+  setDoc, 
+  deleteDoc, 
+  onSnapshot, 
+  getDocs,
+  writeBatch
+} from 'firebase/firestore';
 
 const STORAGE_KEY = 'solarpro_proposals_v1';
 const USERS_STORAGE_KEY = 'solarpro_users_v1';
@@ -37,22 +60,155 @@ export const DEFAULT_USERS: AppUser[] = [
   },
 ];
 
+/**
+ * Remove propriedades com valor `undefined` antes de persistir no Firestore
+ */
+function sanitizeForFirestore<T>(data: T): any {
+  return JSON.parse(JSON.stringify(data));
+}
+
+// -------------------------------------------------------------
+// FIRESTORE REAL-TIME SYNCHRONIZATION & LISTENERS
+// -------------------------------------------------------------
+
+interface FirestoreSyncCallbacks {
+  onProposalsChange?: (proposals: SolarProposal[]) => void;
+  onUsersChange?: (users: AppUser[]) => void;
+  onModulesChange?: (modules: SolarModule[]) => void;
+  onInvertersChange?: (inverters: SolarInverter[]) => void;
+  onSyncStatusChange?: (synced: boolean) => void;
+}
+
+let isSyncInitialized = false;
+
+export function initFirestoreSync(callbacks?: FirestoreSyncCallbacks) {
+  if (isSyncInitialized) return;
+  isSyncInitialized = true;
+
+  try {
+    // 1. Ouvir Propostas no Firestore
+    const proposalsCol = collection(db, 'proposals');
+    onSnapshot(proposalsCol, async (snapshot) => {
+      const cloudProposals: SolarProposal[] = [];
+      snapshot.forEach((d) => {
+        const item = d.data() as SolarProposal;
+        // Não carrega dados de teste/mock se existirem de versões antigas
+        if (!item.id?.startsWith('prop-sample-')) {
+          cloudProposals.push(item);
+        }
+      });
+      
+      // Ordena pela data de criação decrescente
+      cloudProposals.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      
+      saveStoredProposals(cloudProposals);
+      if (callbacks?.onProposalsChange) {
+        callbacks.onProposalsChange(cloudProposals);
+      }
+      if (callbacks?.onSyncStatusChange) {
+        callbacks.onSyncStatusChange(true);
+      }
+    }, (error) => {
+      console.warn('Firestore proposals onSnapshot notice:', error);
+    });
+
+    // 2. Ouvir Usuários no Firestore
+    const usersCol = collection(db, 'users');
+    onSnapshot(usersCol, async (snapshot) => {
+      if (snapshot.empty) {
+        console.log('Semeando usuários padrão no Firestore...');
+        const batch = writeBatch(db);
+        for (const u of DEFAULT_USERS) {
+          const userRef = doc(db, 'users', u.id);
+          batch.set(userRef, sanitizeForFirestore(u));
+        }
+        await batch.commit().catch(console.error);
+      } else {
+        const cloudUsers: AppUser[] = [];
+        snapshot.forEach((d) => {
+          cloudUsers.push(d.data() as AppUser);
+        });
+        saveStoredUsers(cloudUsers);
+        if (callbacks?.onUsersChange) {
+          callbacks.onUsersChange(cloudUsers);
+        }
+      }
+    }, (error) => {
+      console.warn('Firestore users onSnapshot notice:', error);
+    });
+
+    // 3. Ouvir Módulos no Firestore
+    const modulesCol = collection(db, 'modules');
+    onSnapshot(modulesCol, async (snapshot) => {
+      if (snapshot.empty) {
+        const batch = writeBatch(db);
+        for (const m of AVAILABLE_MODULES) {
+          const modRef = doc(db, 'modules', m.id || m.model.replace(/\s+/g, '_'));
+          batch.set(modRef, sanitizeForFirestore(m));
+        }
+        await batch.commit().catch(console.error);
+      } else {
+        const cloudModules: SolarModule[] = [];
+        snapshot.forEach((d) => {
+          cloudModules.push(d.data() as SolarModule);
+        });
+        saveStoredModules(cloudModules);
+        if (callbacks?.onModulesChange) {
+          callbacks.onModulesChange(cloudModules);
+        }
+      }
+    }, (error) => {
+      console.warn('Firestore modules onSnapshot notice:', error);
+    });
+
+    // 4. Ouvir Inversores no Firestore
+    const invertersCol = collection(db, 'inverters');
+    onSnapshot(invertersCol, async (snapshot) => {
+      if (snapshot.empty) {
+        const batch = writeBatch(db);
+        for (const inv of AVAILABLE_INVERTERS) {
+          const invRef = doc(db, 'inverters', inv.id || inv.model.replace(/\s+/g, '_'));
+          batch.set(invRef, sanitizeForFirestore(inv));
+        }
+        await batch.commit().catch(console.error);
+      } else {
+        const cloudInverters: SolarInverter[] = [];
+        snapshot.forEach((d) => {
+          cloudInverters.push(d.data() as SolarInverter);
+        });
+        saveStoredInverters(cloudInverters);
+        if (callbacks?.onInvertersChange) {
+          callbacks.onInvertersChange(cloudInverters);
+        }
+      }
+    }, (error) => {
+      console.warn('Firestore inverters onSnapshot notice:', error);
+    });
+
+  } catch (err) {
+    console.error('Falha ao iniciar sincronização com Firestore:', err);
+  }
+}
+
+// -------------------------------------------------------------
+// PROPOSALS MANAGEMENT (LOCAL + CLOUD FIRESTORE)
+// -------------------------------------------------------------
+
 export function getStoredProposals(): SolarProposal[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(INITIAL_SAMPLE_PROPOSALS));
-      return INITIAL_SAMPLE_PROPOSALS;
+      return [];
     }
     const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed) || parsed.length === 0) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(INITIAL_SAMPLE_PROPOSALS));
-      return INITIAL_SAMPLE_PROPOSALS;
+    if (!Array.isArray(parsed)) {
+      return [];
     }
-    return parsed;
+    // Retorna apenas propostas reais salvas pelo técnico (descarta mocks antigos)
+    return parsed.filter(p => !p.id?.startsWith('prop-sample-'));
   } catch (err) {
     console.error('Error reading proposals from localStorage', err);
-    return INITIAL_SAMPLE_PROPOSALS;
+    return [];
   }
 }
 
@@ -68,13 +224,29 @@ export function saveProposal(proposal: SolarProposal): SolarProposal[] {
   const list = getStoredProposals();
   const existingIdx = list.findIndex(p => p.id === proposal.id);
   let updated: SolarProposal[];
+  const prepared: SolarProposal = {
+    ...proposal,
+    updatedAt: new Date().toISOString()
+  };
+
   if (existingIdx >= 0) {
     updated = [...list];
-    updated[existingIdx] = { ...proposal, updatedAt: new Date().toISOString() };
+    updated[existingIdx] = prepared;
   } else {
-    updated = [proposal, ...list];
+    updated = [prepared, ...list];
   }
   saveStoredProposals(updated);
+
+  // Persistência em Nuvem no Firestore
+  try {
+    const propRef = doc(db, 'proposals', prepared.id);
+    setDoc(propRef, sanitizeForFirestore(prepared), { merge: true }).catch((err) => {
+      console.error('Erro ao salvar proposta no Firestore:', err);
+    });
+  } catch (cloudErr) {
+    console.warn('Persistência Firestore em segundo plano:', cloudErr);
+  }
+
   return updated;
 }
 
@@ -82,6 +254,17 @@ export function deleteProposal(proposalId: string): SolarProposal[] {
   const list = getStoredProposals();
   const updated = list.filter(p => p.id !== proposalId);
   saveStoredProposals(updated);
+
+  // Exclusão no Firestore
+  try {
+    const propRef = doc(db, 'proposals', proposalId);
+    deleteDoc(propRef).catch((err) => {
+      console.error('Erro ao excluir proposta no Firestore:', err);
+    });
+  } catch (cloudErr) {
+    console.warn('Exclusão Firestore em segundo plano:', cloudErr);
+  }
+
   return updated;
 }
 
@@ -159,12 +342,22 @@ export function updatePaymentInstallment(
 }
 
 export function resetToDefaults(): SolarProposal[] {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(INITIAL_SAMPLE_PROPOSALS));
+  saveStoredProposals(INITIAL_SAMPLE_PROPOSALS);
+  try {
+    const batch = writeBatch(db);
+    for (const prop of INITIAL_SAMPLE_PROPOSALS) {
+      const propRef = doc(db, 'proposals', prop.id);
+      batch.set(propRef, sanitizeForFirestore(prop));
+    }
+    batch.commit().catch(console.error);
+  } catch (err) {
+    console.warn('Erro ao restaurar Firestore:', err);
+  }
   return INITIAL_SAMPLE_PROPOSALS;
 }
 
 // -------------------------------------------------------------
-// USER MANAGEMENT & AUTHENTICATION
+// USER MANAGEMENT & AUTHENTICATION (LOCAL + CLOUD FIRESTORE)
 // -------------------------------------------------------------
 
 export function getStoredUsers(): AppUser[] {
@@ -205,14 +398,36 @@ export function saveUser(user: AppUser): AppUser[] {
     updated = [user, ...users];
   }
   saveStoredUsers(updated);
+
+  // Persiste no Firestore
+  try {
+    const userRef = doc(db, 'users', user.id);
+    setDoc(userRef, sanitizeForFirestore(user), { merge: true }).catch((err) => {
+      console.error('Erro ao salvar usuário no Firestore:', err);
+    });
+  } catch (cloudErr) {
+    console.warn('Persistência usuário Firestore:', cloudErr);
+  }
+
   return updated;
 }
 
 export function deleteUser(userId: string): AppUser[] {
   const users = getStoredUsers();
-  // Protect dev master from being deleted
+  // Protege conta dev master de exclusão
   const updated = users.filter(u => u.id !== userId || u.id === 'user-dev-master');
   saveStoredUsers(updated);
+
+  // Exclui no Firestore
+  if (userId !== 'user-dev-master') {
+    try {
+      const userRef = doc(db, 'users', userId);
+      deleteDoc(userRef).catch(console.error);
+    } catch (cloudErr) {
+      console.warn('Exclusão usuário Firestore:', cloudErr);
+    }
+  }
+
   return updated;
 }
 
@@ -275,7 +490,7 @@ export function authenticateUser(usernameInput: string, passwordInput: string): 
   const users = getStoredUsers();
   const normalizedInput = usernameInput.trim().toLowerCase();
   
-  // Find matching user (by username or email)
+  // Localiza usuário por username ou e-mail
   const user = users.find(u => 
     u.username.toLowerCase() === normalizedInput || 
     (u.role === 'dev' && (normalizedInput === 'dev' || normalizedInput === 'dev@castsolar.com'))
@@ -286,7 +501,6 @@ export function authenticateUser(usernameInput: string, passwordInput: string): 
     return { success: false, message: 'Usuário não cadastrado. Verifique o login ou fale com o Desenvolvedor.' };
   }
 
-  // Check password - allow 'dev123' or 'dev' for dev role convenience
   const isDevMaster = user.role === 'dev';
   const passwordMatch = user.password === passwordInput || (isDevMaster && (passwordInput === 'dev' || passwordInput === 'dev123' || passwordInput === 'admin'));
 
@@ -300,7 +514,7 @@ export function authenticateUser(usernameInput: string, passwordInput: string): 
     return { success: false, message: 'Este usuário está temporariamente bloqueado. Fale com o suporte/DEV.' };
   }
 
-  // Update last login
+  // Atualiza último login
   const updatedUser: AppUser = {
     ...user,
     lastLogin: new Date().toISOString()
@@ -361,6 +575,15 @@ export function saveModule(moduleData: SolarModule): SolarModule[] {
     updated = [prepared, ...list];
   }
   saveStoredModules(updated);
+
+  // Firestore
+  try {
+    const modRef = doc(db, 'modules', id);
+    setDoc(modRef, sanitizeForFirestore(prepared), { merge: true }).catch(console.error);
+  } catch (err) {
+    console.warn('Salvar módulo no Firestore:', err);
+  }
+
   return updated;
 }
 
@@ -368,6 +591,14 @@ export function deleteModule(identifier: string): SolarModule[] {
   const list = getStoredModules();
   const updated = list.filter(m => m.id !== identifier && m.model !== identifier);
   saveStoredModules(updated);
+
+  try {
+    const modRef = doc(db, 'modules', identifier);
+    deleteDoc(modRef).catch(console.error);
+  } catch (err) {
+    console.warn('Excluir módulo no Firestore:', err);
+  }
+
   return updated;
 }
 
@@ -416,6 +647,15 @@ export function saveInverter(inverterData: SolarInverter): SolarInverter[] {
     updated = [prepared, ...list];
   }
   saveStoredInverters(updated);
+
+  // Firestore
+  try {
+    const invRef = doc(db, 'inverters', id);
+    setDoc(invRef, sanitizeForFirestore(prepared), { merge: true }).catch(console.error);
+  } catch (err) {
+    console.warn('Salvar inversor no Firestore:', err);
+  }
+
   return updated;
 }
 
@@ -423,6 +663,14 @@ export function deleteInverter(identifier: string): SolarInverter[] {
   const list = getStoredInverters();
   const updated = list.filter(i => i.id !== identifier && i.model !== identifier);
   saveStoredInverters(updated);
+
+  try {
+    const invRef = doc(db, 'inverters', identifier);
+    deleteDoc(invRef).catch(console.error);
+  } catch (err) {
+    console.warn('Excluir inversor no Firestore:', err);
+  }
+
   return updated;
 }
 
@@ -432,6 +680,9 @@ export function resetEquipmentToDefaults(): { modules: SolarModule[]; inverters:
   return { modules: AVAILABLE_MODULES, inverters: AVAILABLE_INVERTERS };
 }
 
+// -------------------------------------------------------------
+// ACCESS AUDIT LOGS
+// -------------------------------------------------------------
 
 export function getStoredLogs(): AccessLog[] {
   try {
@@ -460,9 +711,12 @@ export function logAccess(
       status,
       details
     };
-    // Keep last 100 logs
     const updated = [newLog, ...logs].slice(0, 100);
     localStorage.setItem(LOGS_STORAGE_KEY, JSON.stringify(updated));
+
+    // Firestore
+    const logRef = doc(db, 'logs', newLog.id);
+    setDoc(logRef, sanitizeForFirestore(newLog)).catch(console.error);
   } catch (err) {
     console.error('Error logging access', err);
   }

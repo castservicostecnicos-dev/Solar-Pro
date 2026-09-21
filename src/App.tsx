@@ -16,7 +16,8 @@ import {
   updatePaymentInstallment, 
   resetToDefaults,
   getCurrentSession,
-  setCurrentSession 
+  setCurrentSession,
+  initFirestoreSync 
 } from './utils/storage';
 import { Navbar, NavTabType } from './components/Navbar';
 import { SizingCalculator } from './components/SizingCalculator';
@@ -60,9 +61,20 @@ export default function App() {
   const [isPwaModalOpen, setIsPwaModalOpen] = useState(false);
 
   useEffect(() => {
-    // Load initial data
+    // Carrega dados locais imediatos para renderização sem latência
     const loaded = getStoredProposals();
     setProposals(loaded);
+
+    // Conecta a sincronização em tempo real do banco de dados na nuvem (Firebase Firestore)
+    initFirestoreSync({
+      onProposalsChange: (updatedProposals) => {
+        setProposals(updatedProposals);
+        setSelectedProposal((prev) => {
+          if (!prev) return null;
+          return updatedProposals.find((p) => p.id === prev.id) || prev;
+        });
+      },
+    });
 
     // Register PWA service worker if supported
     if ('serviceWorker' in navigator) {
@@ -197,7 +209,7 @@ export default function App() {
           onLogout={handleLogout}
         />
         <main className="flex-1 max-w-7xl w-full mx-auto p-3 sm:p-6 lg:p-8">
-          <DevDashboard currentUser={currentUser} />
+          <DevDashboard currentUser={currentUser} onLogout={handleLogout} />
         </main>
       </div>
     );
@@ -233,6 +245,11 @@ export default function App() {
             onBack={() => setSelectedProposal(null)}
             onSignProposal={handleSignProposal}
             onOpenFollowUp={(prop) => setFollowUpModalProposal(prop)}
+            onUpdateProposal={(updated) => {
+              const list = saveProposal(updated);
+              setProposals(list);
+              setSelectedProposal(updated);
+            }}
           />
         ) : (
           <>
@@ -252,6 +269,8 @@ export default function App() {
                 onOpenFollowUp={(prop) => setFollowUpModalProposal(prop)}
                 onNewProposal={() => setActiveTab('calculator')}
                 onUpdateStatus={handleUpdateStatus}
+                currentUser={currentUser}
+                onLogout={handleLogout}
               />
             )}
 

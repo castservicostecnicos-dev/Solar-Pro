@@ -2,12 +2,32 @@
 
 @layer base {
   html, body {
-    overflow-x: hidden;
+    overflow-x: hidden !important;
     width: 100%;
     max-width: 100%;
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
     touch-action: manipulation;
     font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
     -webkit-tap-highlight-color: transparent;
+  }
+
+  #root {
+    overflow-x: hidden !important;
+    width: 100%;
+    max-width: 100%;
+    position: relative;
+    box-sizing: border-box;
+  }
+
+  *, *::before, *::after {
+    box-sizing: border-box;
+  }
+
+  /* Evita que textos longos, links ou hashes estourem a largura em mobile */
+  p, h1, h2, h3, h4, h5, h6, span, strong, em, label {
+    overflow-wrap: break-word;
   }
 }
 

@@ -18,9 +18,10 @@ import {
   ArrowRight,
   User,
   Eye,
-  CheckCircle2
+  CheckCircle2,
+  LogOut
 } from 'lucide-react';
-import { SolarProposal, LeadStatus } from '../types';
+import { SolarProposal, LeadStatus, AppUser } from '../types';
 import { CRM_STAGES } from '../data/solarDefaults';
 import { formatCurrencyBRL } from '../utils/solarCalculations';
 
@@ -30,6 +31,8 @@ interface CRMBoardProps {
   onOpenFollowUp: (proposal: SolarProposal) => void;
   onNewProposal: () => void;
   onUpdateStatus: (proposalId: string, newStatus: LeadStatus) => void;
+  currentUser?: AppUser | null;
+  onLogout?: () => void;
 }
 
 export const CRMBoard: React.FC<CRMBoardProps> = ({
@@ -38,6 +41,8 @@ export const CRMBoard: React.FC<CRMBoardProps> = ({
   onOpenFollowUp,
   onNewProposal,
   onUpdateStatus,
+  currentUser,
+  onLogout,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedStateFilter, setSelectedStateFilter] = useState('all');
@@ -101,6 +106,43 @@ export const CRMBoard: React.FC<CRMBoardProps> = ({
   return (
     <div className="space-y-4 sm:space-y-6">
       
+      {/* User Session & Quick Logout Bar */}
+      {currentUser && onLogout && (
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-200/90 shadow-sm">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-amber-500 to-amber-300 text-slate-950 flex items-center justify-center font-bold text-base font-display shadow-sm shadow-amber-500/20 shrink-0">
+              {currentUser.name.charAt(0).toUpperCase()}
+            </div>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h2 className="text-sm sm:text-base font-bold text-slate-900 leading-tight truncate">
+                  Olá, {currentUser.name}!
+                </h2>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                  Sessão Ativa
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 mt-0.5 truncate">
+                {currentUser.company ? `${currentUser.company} • ` : ''}Usuário: <span className="font-mono font-medium text-slate-700">{currentUser.username}</span>
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
+            <button
+              id="btn-dashboard-logout"
+              type="button"
+              onClick={onLogout}
+              className="flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold text-rose-600 hover:text-white bg-rose-50 hover:bg-rose-600 border border-rose-200 hover:border-rose-600 transition-all cursor-pointer shadow-xs active:scale-95"
+              title="Encerrar sessão atual e voltar para a tela de login"
+            >
+              <LogOut className="w-4 h-4 shrink-0" />
+              <span>Sair da Conta</span>
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Top Banner & Pipeline KPI Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3">
         <div className="bg-white p-3 sm:p-4 rounded-2xl border border-slate-200 shadow-sm">

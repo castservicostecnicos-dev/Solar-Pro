@@ -18,6 +18,56 @@ const MONTH_WEIGHTS = [
 ];
 
 export function calculateSolarSystem(input: SizingInput): FinancialResult {
+  // Verificação estrita: Se o técnico ainda não selecionou a placa, o inversor ou a potência/consumo,
+  // a proposta é carregada 100% LIMPA com todos os valores zerados (R$ 0,00, 0 kWp, 0 módulos).
+  const hasModule = Boolean(input.moduleModelId && input.moduleModelId.trim() !== '');
+  const hasInverter = Boolean(input.inverterModelId && input.inverterModelId.trim() !== '');
+  const hasPowerOrConsumption = Boolean(
+    (input.monthlyAverageKwh && input.monthlyAverageKwh > 0) ||
+    (input.directSystemPowerKwp && input.directSystemPowerKwp > 0) ||
+    (input.directModuleQuantity && input.directModuleQuantity > 0)
+  );
+
+  if (!hasModule || !hasInverter || !hasPowerOrConsumption) {
+    return {
+      systemPowerKwp: 0,
+      moduleQuantity: 0,
+      moduleUnitPowerWp: 0,
+      roofAreaRequiredM2: 0,
+      inverterPowerKw: 0,
+      inverterQuantity: 0,
+      annualGenerationKwh: 0,
+      monthlyAverageGenerationKwh: 0,
+      currentMonthlyBill: 0,
+      estimatedNewMonthlyBill: 0,
+      monthlySavings: 0,
+      annualSavings: 0,
+      twentyFiveYearSavings: 0,
+      totalInvestment: 0,
+      paybackYears: 0,
+      paybackMonths: 0,
+      roiPercentage: 0,
+      co2AvoidedTonsPerYear: 0,
+      treesPlantedEquivalent: 0,
+      monthlyBreakdown: MONTH_WEIGHTS.map(mw => ({
+        month: mw.month,
+        consumptionKwh: 0,
+        generationKwh: 0,
+        savingsReais: 0,
+      })),
+      costBreakdown: {
+        modulesTotal: 0,
+        inverterTotal: 0,
+        structuresTotal: 0,
+        electricalKitTotal: 0,
+        installationAndLaborTotal: 0,
+        homologationAndArtTotal: 0,
+        commercialMarginTotal: 0,
+        isExactCalculation: false,
+      },
+    };
+  }
+
   // Find state HSP if custom HSP not provided
   const stateData = BRAZILIAN_STATES_SOLAR.find(s => s.state === input.clientState);
   const hsp = input.customHsp && input.customHsp > 0 
@@ -35,12 +85,6 @@ export function calculateSolarSystem(input: SizingInput): FinancialResult {
       ? 50 
       : 100;
 
-  // Consumo a compensar
-  const targetMonthlyKwh = Math.max(input.monthlyAverageKwh - availabilityKwh, 100);
-
-  // Potência do sistema em kWp = Consumo / (HSP * 30 * PR)
-  const rawPowerKwp = targetMonthlyKwh / (hsp * 30 * performanceRatio);
-
   // Módulo selecionado (busca nos módulos cadastrados do cliente ou defaults)
   let modulesList: SolarModule[];
   try {
@@ -50,20 +94,32 @@ export function calculateSolarSystem(input: SizingInput): FinancialResult {
   }
   const selectedModule: SolarModule = modulesList.find(m => m.model === input.moduleModelId || m.id === input.moduleModelId) 
     || AVAILABLE_MODULES.find(m => m.model === input.moduleModelId)
-    || modulesList[0] 
-    || AVAILABLE_MODULES[0];
+    || { model: input.moduleModelId, brand: 'Módulo Selecionado', powerWp: 550, efficiency: 21.5, warrantyYears: 25, unitPrice: 450 };
   const moduleKw = selectedModule.powerWp / 1000;
 
-  // Quantidade de módulos necessária
-  const moduleQuantity = Math.max(Math.ceil(rawPowerKwp / moduleKw), 2);
-  const systemPowerKwp = Number((moduleQuantity * moduleKw).toFixed(2));
+  // Dimensionamento: Potência e Quantidade de Placas
+  let moduleQuantity = 0;
+  let systemPowerKwp = 0;
+
+  if (input.directSystemPowerKwp && input.directSystemPowerKwp > 0) {
+    // Modo 1: O técnico informou a quantidade exata de quilowatts (kWp)
+    moduleQuantity = Math.max(Math.ceil((input.directSystemPowerKwp * 1000) / selectedModule.powerWp), 1);
+    systemPowerKwp = Number((moduleQuantity * moduleKw).toFixed(2));
+  } else if (input.directModuleQuantity && input.directModuleQuantity > 0) {
+    // Modo 2: O técnico informou a quantidade exata de placas
+    moduleQuantity = Math.max(input.directModuleQuantity, 1);
+    systemPowerKwp = Number((moduleQuantity * moduleKw).toFixed(2));
+  } else {
+    // Modo 3: Calculado a partir do consumo em kWh informado
+    const effectiveConsumption = Math.max(input.monthlyAverageKwh || 0, availabilityKwh + 10);
+    const targetMonthlyKwh = Math.max(effectiveConsumption - availabilityKwh, 30);
+    const rawPowerKwp = targetMonthlyKwh / (hsp * 30 * performanceRatio);
+    moduleQuantity = Math.max(Math.ceil(rawPowerKwp / moduleKw), 1);
+    systemPowerKwp = Number((moduleQuantity * moduleKw).toFixed(2));
+  }
 
   // Área de telhado necessária (~2.6 m² por placa com espaçamento)
   const roofAreaRequiredM2 = Number((moduleQuantity * 2.6).toFixed(1));
-
-  // Inversor sugerido (FDI ~ 1.25)
-  const idealInverterKw = Number((systemPowerKwp / 1.25).toFixed(1));
-  const inverterQuantity = 1;
 
   // Inversor selecionado
   let invertersList: SolarInverter[];
@@ -73,26 +129,31 @@ export function calculateSolarSystem(input: SizingInput): FinancialResult {
     invertersList = AVAILABLE_INVERTERS;
   }
 
-  const selectedInverter: SolarInverter = (input.inverterModelId 
-    ? invertersList.find(i => i.model === input.inverterModelId || i.id === input.inverterModelId)
-    : null)
-    || invertersList.find(i => i.powerKw >= idealInverterKw && (input.inverterTypeId === 'microinversor' ? i.type === 'microinversor' : i.type !== 'microinversor')) 
-    || invertersList[0] 
-    || AVAILABLE_INVERTERS[0];
+  const idealInverterKw = Number((systemPowerKwp / 1.25).toFixed(1));
+  const selectedInverter: SolarInverter = invertersList.find(i => i.model === input.inverterModelId || i.id === input.inverterModelId)
+    || AVAILABLE_INVERTERS.find(i => i.model === input.inverterModelId || i.id === input.inverterModelId)
+    || { model: input.inverterModelId || 'Inversor', brand: 'Inversor', powerKw: idealInverterKw, type: input.inverterTypeId, warrantyYears: 10, unitPrice: 3800 };
+
+  const inverterQuantity = 1;
 
   // Geração média mensal estimada (kWh)
   const monthlyAverageGenerationKwh = Math.round(systemPowerKwp * hsp * 30 * performanceRatio);
   const annualGenerationKwh = Math.round(monthlyAverageGenerationKwh * 12);
 
+  // Consumo de referência para a fatura atual
+  const effectiveMonthlyKwh = input.monthlyAverageKwh > 0 
+    ? input.monthlyAverageKwh 
+    : Math.round(monthlyAverageGenerationKwh + availabilityKwh);
+
   // Fatura atual sem solar
-  const currentMonthlyBill = Number((input.monthlyAverageKwh * tariff + cip).toFixed(2));
+  const currentMonthlyBill = Number((effectiveMonthlyKwh * tariff + cip).toFixed(2));
 
   // Nova fatura estimada com solar (Disponibilidade + CIP + Pequeno resíduo Fio B da Lei 14.300 ~12%)
   const newAvailabilityCost = availabilityKwh * tariff;
   const estimatedNewMonthlyBill = Number((newAvailabilityCost + cip + (monthlyAverageGenerationKwh * 0.04)).toFixed(2));
 
   // Economias
-  const monthlySavings = Number(Math.max(currentMonthlyBill - estimatedNewMonthlyBill, 50).toFixed(2));
+  const monthlySavings = Number(Math.max(currentMonthlyBill - estimatedNewMonthlyBill, 10).toFixed(2));
   const annualSavings = Number((monthlySavings * 12).toFixed(2));
 
   // Projeção 25 anos com reajuste tarifário médio de 6.5% ao ano e degradação de 0.5% a.a. nos painéis

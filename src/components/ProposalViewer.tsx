@@ -14,18 +14,26 @@ import {
   DollarSign,
   Building,
   Check,
-  Send
+  Send,
+  Camera,
+  UploadCloud,
+  ImageIcon,
+  X,
+  Maximize2
 } from 'lucide-react';
 import { SolarProposal, DigitalSignatureData } from '../types';
 import { generateProposalPDF } from '../utils/pdfGenerator';
 import { formatCurrencyBRL, formatNumberBR } from '../utils/solarCalculations';
 import { DigitalSignatureModal } from './DigitalSignatureModal';
+import { compressImageFile } from '../utils/imageCompressor';
+import { saveProposal } from '../utils/storage';
 
 interface ProposalViewerProps {
   proposal: SolarProposal;
   onBack: () => void;
   onSignProposal: (proposalId: string, signature: DigitalSignatureData) => void;
   onOpenFollowUp: (proposal: SolarProposal) => void;
+  onUpdateProposal?: (updated: SolarProposal) => void;
 }
 
 export const ProposalViewer: React.FC<ProposalViewerProps> = ({
@@ -33,9 +41,35 @@ export const ProposalViewer: React.FC<ProposalViewerProps> = ({
   onBack,
   onSignProposal,
   onOpenFollowUp,
+  onUpdateProposal,
 }) => {
   const [isSignModalOpen, setIsSignModalOpen] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
+  const [previewPhoto, setPreviewPhoto] = useState<string | null>(null);
+  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
+
+  const handleAddPhotosToProposal = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    try {
+      setIsUploadingPhoto(true);
+      const newPhotos: string[] = [];
+      for (let i = 0; i < files.length; i++) {
+        const compressed = await compressImageFile(files[i], 1200, 1200, 0.8);
+        newPhotos.push(compressed);
+      }
+      const updated: SolarProposal = {
+        ...proposal,
+        photos: [...(proposal.photos || []), ...newPhotos],
+      };
+      saveProposal(updated);
+      onUpdateProposal?.(updated);
+    } catch (err) {
+      console.error('Erro ao adicionar foto:', err);
+    } finally {
+      setIsUploadingPhoto(false);
+    }
+  };
 
   const handleDownloadPDF = () => {
     generateProposalPDF(proposal);
@@ -370,11 +404,76 @@ export const ProposalViewer: React.FC<ProposalViewerProps> = ({
             </div>
           </div>
 
+          {/* Section: Photos & Technical Survey */}
+          <div className="pt-2 border-t border-slate-200">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-xs font-bold uppercase tracking-wider text-slate-800 flex items-center gap-2">
+                <Camera className="w-4 h-4 text-amber-600" />
+                3. Vistoria Técnica & Fotos Anexadas
+              </h2>
+              <label className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-amber-100/60 text-slate-700 hover:text-amber-900 rounded-xl text-xs font-semibold border border-slate-200 cursor-pointer transition-colors">
+                <UploadCloud className="w-3.5 h-3.5 text-amber-600" />
+                <span>{isUploadingPhoto ? 'Enviando...' : '+ Anexar Foto'}</span>
+                <input
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  onChange={handleAddPhotosToProposal}
+                  disabled={isUploadingPhoto}
+                  className="hidden"
+                />
+              </label>
+            </div>
+
+            {(!proposal.billPhoto && (!proposal.photos || proposal.photos.length === 0)) ? (
+              <div className="p-4 bg-slate-50 rounded-xl border border-dashed border-slate-200 text-center">
+                <p className="text-xs text-slate-500">
+                  Nenhuma foto anexada a esta proposta ainda. Clique no botão acima para adicionar a foto da conta de luz ou fotos do telhado/padrão de entrada (salvas na nuvem).
+                </p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                {proposal.billPhoto && (
+                  <div 
+                    onClick={() => setPreviewPhoto(proposal.billPhoto || null)}
+                    className="relative group rounded-xl overflow-hidden border border-slate-200 bg-slate-100 aspect-video cursor-pointer shadow-sm hover:shadow-md transition-shadow"
+                  >
+                    <img src={proposal.billPhoto} alt="Conta de Luz" className="w-full h-full object-cover" />
+                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-xs font-medium gap-1">
+                      <Maximize2 className="w-4 h-4" />
+                      <span>Ver Fatura</span>
+                    </div>
+                    <span className="absolute bottom-1.5 left-1.5 bg-slate-950/70 text-white text-[10px] font-bold px-1.5 py-0.5 rounded">
+                      Conta de Luz
+                    </span>
+                  </div>
+                )}
+
+                {proposal.photos?.map((photo, i) => (
+                  <div
+                    key={i}
+                    onClick={() => setPreviewPhoto(photo)}
+                    className="relative group rounded-xl overflow-hidden border border-slate-200 bg-slate-100 aspect-video cursor-pointer shadow-sm hover:shadow-md transition-shadow"
+                  >
+                    <img src={photo} alt={`Foto Local ${i + 1}`} className="w-full h-full object-cover" />
+                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-xs font-medium gap-1">
+                      <Maximize2 className="w-4 h-4" />
+                      <span>Ampliar</span>
+                    </div>
+                    <span className="absolute bottom-1.5 left-1.5 bg-slate-950/70 text-white text-[10px] font-bold px-1.5 py-0.5 rounded">
+                      Local #{i + 1}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
           {/* Digital Signature Box */}
           <div className="pt-2">
             <h2 className="text-xs font-bold uppercase tracking-wider text-slate-800 mb-3 flex items-center gap-2">
               <ShieldCheck className="w-4 h-4 text-amber-600" />
-              3. Autenticação & Assinatura Digital
+              4. Autenticação & Assinatura Digital
             </h2>
 
             {isSigned && proposal.signature ? (
@@ -392,7 +491,7 @@ export const ProposalViewer: React.FC<ProposalViewerProps> = ({
                     </div>
                   </div>
 
-                  <div className="px-3 py-1 bg-emerald-200/80 text-emerald-950 text-xs font-mono font-bold rounded-lg border border-emerald-300">
+                  <div className="px-3 py-1 bg-emerald-200/80 text-emerald-950 text-xs font-mono font-bold rounded-lg border border-emerald-300 break-all max-w-full">
                     HASH: {proposal.signature.validationHash}
                   </div>
                 </div>
@@ -459,6 +558,30 @@ export const ProposalViewer: React.FC<ProposalViewerProps> = ({
         onClose={() => setIsSignModalOpen(false)}
         onConfirmSignature={(sig) => onSignProposal(proposal.id, sig)}
       />
+
+      {/* Lightbox Preview Modal */}
+      {previewPhoto && (
+        <div 
+          className="fixed inset-0 z-50 bg-black/85 backdrop-blur-xs flex items-center justify-center p-4 animate-fadeIn"
+          onClick={() => setPreviewPhoto(null)}
+        >
+          <div className="relative max-w-4xl w-full max-h-[90vh] flex flex-col items-center" onClick={(e) => e.stopPropagation()}>
+            <button
+              type="button"
+              onClick={() => setPreviewPhoto(null)}
+              className="self-end mb-2 text-white hover:text-amber-400 p-1 font-bold flex items-center gap-1 cursor-pointer bg-slate-900/80 px-3 py-1.5 rounded-xl border border-slate-700"
+            >
+              <X className="w-5 h-5" />
+              <span className="text-xs">Fechar</span>
+            </button>
+            <img 
+              src={previewPhoto} 
+              alt="Ampliação da Foto" 
+              className="max-h-[80vh] max-w-full object-contain rounded-2xl shadow-2xl border border-slate-700 bg-black" 
+            />
+          </div>
+        </div>
+      )}
 
     </div>
   );

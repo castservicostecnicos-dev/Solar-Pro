@@ -1,11 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { AppUser } from '../types';
 import { 
   getStoredUsers, 
   saveUser, 
   deleteUser, 
   resetUserPassword,
-  toggleUserStatus 
+  toggleUserStatus,
+  initFirestoreSync 
 } from '../utils/storage';
 import { 
   ShieldCheck, 
@@ -29,14 +30,16 @@ import {
   AlertTriangle, 
   Mail, 
   CheckCircle2, 
-  RefreshCw 
+  RefreshCw,
+  LogOut 
 } from 'lucide-react';
 
 interface DevDashboardProps {
   currentUser: AppUser;
+  onLogout?: () => void;
 }
 
-export const DevDashboard: React.FC<DevDashboardProps> = ({ currentUser }) => {
+export const DevDashboard: React.FC<DevDashboardProps> = ({ currentUser, onLogout }) => {
   const [users, setUsers] = useState<AppUser[]>(getStoredUsers());
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'todos' | 'ativo' | 'bloqueado'>('todos');
@@ -78,6 +81,14 @@ export const DevDashboard: React.FC<DevDashboardProps> = ({ currentUser }) => {
   const refreshData = () => {
     setUsers(getStoredUsers());
   };
+
+  useEffect(() => {
+    initFirestoreSync({
+      onUsersChange: (updatedUsers) => {
+        setUsers(updatedUsers);
+      },
+    });
+  }, []);
 
   const generateRandomPassword = () => {
     const chars = 'abcdefghijkmnpqrstuvwxyz23456789';
@@ -261,12 +272,12 @@ export const DevDashboard: React.FC<DevDashboardProps> = ({ currentUser }) => {
             </p>
           </div>
 
-          <div className="flex items-center gap-2.5">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-2.5">
             <button
               id="btn-dev-new-client"
               type="button"
               onClick={handleOpenCreateUser}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold text-xs sm:text-sm shadow-lg shadow-amber-500/20 transition-all cursor-pointer"
+              className="flex items-center gap-2 px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold text-xs sm:text-sm shadow-lg shadow-amber-500/20 transition-all cursor-pointer"
             >
               <UserPlus className="w-4 h-4" />
               <span>Cadastrar Novo Cliente</span>
@@ -275,10 +286,22 @@ export const DevDashboard: React.FC<DevDashboardProps> = ({ currentUser }) => {
               type="button"
               onClick={refreshData}
               title="Atualizar lista"
-              className="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition-colors"
+              className="p-2 sm:p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition-colors"
             >
               <RefreshCw className="w-4 h-4" />
             </button>
+            {onLogout && (
+              <button
+                id="btn-dev-banner-logout"
+                type="button"
+                onClick={onLogout}
+                title="Sair do painel DEV (Deslogar)"
+                className="flex items-center gap-1.5 px-3 py-2 sm:py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 active:bg-rose-700 text-white border border-rose-500/50 text-xs sm:text-sm font-bold transition-all cursor-pointer shadow-sm active:scale-95 shrink-0"
+              >
+                <LogOut className="w-4 h-4 text-white" />
+                <span>Sair</span>
+              </button>
+            )}
           </div>
         </div>
       </div>

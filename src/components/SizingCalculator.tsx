@@ -20,8 +20,14 @@ import {
   ChevronDown,
   ChevronUp,
   Cpu,
-  Info
+  Info,
+  Camera,
+  UploadCloud,
+  ImageIcon,
+  Trash2,
+  AlertCircle
 } from 'lucide-react';
+import { compressImageFile } from '../utils/imageCompressor';
 import { 
   BarChart, 
   Bar, 
@@ -86,22 +92,80 @@ export const SizingCalculator: React.FC<SizingCalculatorProps> = ({
     installationType: initialValues?.installationType || 'residencial',
     roofType: initialValues?.roofType || 'ceramico',
     connectionType: initialValues?.connectionType || 'bifasico',
-    monthlyAverageKwh: initialValues?.monthlyAverageKwh || 650,
+    monthlyAverageKwh: initialValues?.monthlyAverageKwh || 0, // Proposta limpa: começa zerada
+    directSystemPowerKwp: initialValues?.directSystemPowerKwp || 0, // Proposta limpa: começa zerada
+    directModuleQuantity: initialValues?.directModuleQuantity || 0, // Proposta limpa: começa zerada
     tariffRate: initialValues?.tariffRate || 0.95,
     cipRate: initialValues?.cipRate || 30.0,
     customHsp: undefined,
     inflationRate: 6.5,
-    moduleModelId: initialValues?.moduleModelId || (storedModules[0]?.model || AVAILABLE_MODULES[0].model),
+    moduleModelId: initialValues?.moduleModelId || '', // Proposta limpa: técnico escolhe a placa
     inverterTypeId: initialValues?.inverterTypeId || 'string',
-    inverterModelId: initialValues?.inverterModelId,
+    inverterModelId: initialValues?.inverterModelId || '', // Proposta limpa: técnico escolhe o inversor
     pricingMode: initialValues?.pricingMode || 'equipment_exact',
     customMarginPercent: initialValues?.customMarginPercent ?? 22,
   });
+
+  // Modo de dimensionamento pelo técnico (consumo, kWp direto ou quantidade de placas)
+  const [sizingMethod, setSizingMethod] = useState<'consumption' | 'kwp' | 'modules'>(
+    initialValues?.directSystemPowerKwp ? 'kwp' : initialValues?.directModuleQuantity ? 'modules' : 'consumption'
+  );
 
   const [aiPitch, setAiPitch] = useState<string>('');
   const [isGeneratingAi, setIsGeneratingAi] = useState(false);
   const [clientAddress, setClientAddress] = useState('');
   const [consumerUnit, setConsumerUnit] = useState('');
+
+  // Attached photos states
+  const [billPhoto, setBillPhoto] = useState<string | undefined>(formData.billPhoto);
+  const [photos, setPhotos] = useState<string[]>(formData.photos || []);
+  const [isCompressingPhoto, setIsCompressingPhoto] = useState(false);
+
+  const handleBillPhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      setIsCompressingPhoto(true);
+      const compressed = await compressImageFile(file, 1200, 1200, 0.8);
+      setBillPhoto(compressed);
+      setFormData(prev => ({ ...prev, billPhoto: compressed }));
+    } catch (err) {
+      console.error('Erro ao processar foto da conta:', err);
+    } finally {
+      setIsCompressingPhoto(false);
+    }
+  };
+
+  const handleRemoveBillPhoto = () => {
+    setBillPhoto(undefined);
+    setFormData(prev => ({ ...prev, billPhoto: undefined }));
+  };
+
+  const handleLocalPhotosUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    try {
+      setIsCompressingPhoto(true);
+      const compressedList: string[] = [];
+      for (let i = 0; i < Math.min(files.length, 6); i++) {
+        const comp = await compressImageFile(files[i], 1200, 1200, 0.8);
+        compressedList.push(comp);
+      }
+      const updated = [...(photos || []), ...compressedList];
+      setPhotos(updated);
+      setFormData(prev => ({ ...prev, photos: updated }));
+    } catch (err) {
+      console.error('Erro ao processar fotos do local:', err);
+    } finally {
+      setIsCompressingPhoto(false);
+    }
+  };
+
+  const handleRemovePhoto = (idx: number) => {
+    const updated = photos.filter((_, i) => i !== idx);
+    setPhotos(updated);
+    setFormData(prev => ({ ...prev, photos: updated }));
+  };
 
   // Handle state change and auto-update tariff and concessionaire
   const handleStateChange = (stateCode: string) => {
@@ -120,21 +184,18 @@ export const SizingCalculator: React.FC<SizingCalculatorProps> = ({
 
   // Selected module and inverter dynamically from stored equipment list
   const selectedModule = useMemo(() => {
+    if (!formData.moduleModelId) return null;
     return storedModules.find(m => m.model === formData.moduleModelId || m.id === formData.moduleModelId) 
-      || storedModules[0] 
-      || AVAILABLE_MODULES[0];
+      || AVAILABLE_MODULES.find(m => m.model === formData.moduleModelId)
+      || null;
   }, [storedModules, formData.moduleModelId]);
 
   const selectedInverter = useMemo(() => {
-    if (formData.inverterModelId) {
-      const byId = storedInverters.find(i => i.id === formData.inverterModelId || i.model === formData.inverterModelId);
-      if (byId) return byId;
-    }
-    const kw = calculations.inverterPowerKw;
-    return storedInverters.find(i => i.powerKw >= kw && (formData.inverterTypeId === 'microinversor' ? i.type === 'microinversor' : i.type !== 'microinversor')) 
-      || storedInverters[0] 
-      || AVAILABLE_INVERTERS[0];
-  }, [storedInverters, calculations.inverterPowerKw, formData.inverterTypeId, formData.inverterModelId]);
+    if (!formData.inverterModelId) return null;
+    return storedInverters.find(i => i.model === formData.inverterModelId || i.id === formData.inverterModelId) 
+      || AVAILABLE_INVERTERS.find(i => i.model === formData.inverterModelId || i.id === formData.inverterModelId)
+      || null;
+  }, [storedInverters, formData.inverterModelId]);
 
   // AI pitch generator
   const handleGenerateAiPitch = async () => {
@@ -169,6 +230,11 @@ export const SizingCalculator: React.FC<SizingCalculatorProps> = ({
 
   // Create proposal action
   const handleCreateProposal = () => {
+    if (!formData.moduleModelId || !formData.inverterModelId || calculations.systemPowerKwp <= 0) {
+      alert('A proposta está limpa. Por favor, preencha os dados do sistema: selecione a placa fotovoltaica, o inversor e informe o consumo ou potência em kWp para calcular os valores antes de gerar.');
+      return;
+    }
+
     const stateObj = BRAZILIAN_STATES_SOLAR.find(s => s.state === formData.clientState);
     const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
     const randCode = Math.floor(100 + Math.random() * 900);
@@ -199,8 +265,8 @@ export const SizingCalculator: React.FC<SizingCalculatorProps> = ({
         monthlyAverageKwh: formData.monthlyAverageKwh,
         tariffRate: formData.tariffRate,
         hsp: formData.customHsp || stateObj?.hsp || 4.8,
-        module: selectedModule,
-        inverter: selectedInverter,
+        module: selectedModule || { model: formData.moduleModelId, brand: 'Módulo Selecionado', powerWp: 550, efficiency: 21.5, warrantyYears: 25 },
+        inverter: selectedInverter || { model: formData.inverterModelId, brand: 'Inversor Selecionado', powerKw: calculations.inverterPowerKw, type: formData.inverterTypeId, warrantyYears: 10 },
         systemPowerKwp: calculations.systemPowerKwp,
         moduleCount: calculations.moduleQuantity,
         areaM2: calculations.roofAreaRequiredM2,
@@ -242,6 +308,8 @@ export const SizingCalculator: React.FC<SizingCalculatorProps> = ({
           author: 'Engenharia SolarPro',
         },
       ],
+      billPhoto: formData.billPhoto || billPhoto,
+      photos: formData.photos || photos,
     };
 
     onProposalCreated(newProposal);
@@ -447,32 +515,173 @@ export const SizingCalculator: React.FC<SizingCalculatorProps> = ({
                 </div>
               </div>
 
-              {/* Monthly Consumption Slider & Input */}
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="text-xs font-semibold text-slate-700">
-                    Consumo Médio Mensal (kWh/mês) *
-                  </label>
-                  <span className="text-xs font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
-                    {formatNumberBR(formData.monthlyAverageKwh)} kWh
+              {/* Modo de Definição pelo Técnico: kWp, Qtd Placas ou Consumo */}
+              <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-bold text-slate-800 uppercase tracking-wider">
+                    Como o Técnico vai definir o sistema?
+                  </span>
+                  <span className="text-[10px] text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200/80 font-medium">
+                    Preenchimento do Instalador
                   </span>
                 </div>
-                <input
-                  type="range"
-                  min={100}
-                  max={5000}
-                  step={20}
-                  value={formData.monthlyAverageKwh}
-                  onChange={(e) => setFormData({ ...formData, monthlyAverageKwh: Number(e.target.value) })}
-                  className="w-full accent-amber-500 cursor-pointer"
-                />
-                <div className="flex justify-between text-[10px] text-slate-400 font-mono mt-0.5">
-                  <span>100 kWh</span>
-                  <span>1.500 kWh</span>
-                  <span>3.000 kWh</span>
-                  <span>5.000 kWh</span>
+                
+                <div className="grid grid-cols-3 gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSizingMethod('kwp');
+                      setFormData(prev => ({ ...prev, monthlyAverageKwh: 0, directModuleQuantity: 0 }));
+                    }}
+                    className={`py-2 px-2 rounded-lg text-xs font-bold transition-all text-center cursor-pointer ${
+                      sizingMethod === 'kwp'
+                        ? 'bg-amber-500 text-slate-950 shadow-xs ring-1 ring-amber-600'
+                        : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
+                    }`}
+                  >
+                    Por Potência (kWp)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSizingMethod('modules');
+                      setFormData(prev => ({ ...prev, monthlyAverageKwh: 0, directSystemPowerKwp: 0 }));
+                    }}
+                    className={`py-2 px-2 rounded-lg text-xs font-bold transition-all text-center cursor-pointer ${
+                      sizingMethod === 'modules'
+                        ? 'bg-slate-900 text-white shadow-xs'
+                        : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
+                    }`}
+                  >
+                    Por Qtd. Placas
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSizingMethod('consumption');
+                      setFormData(prev => ({ ...prev, directSystemPowerKwp: 0, directModuleQuantity: 0 }));
+                    }}
+                    className={`py-2 px-2 rounded-lg text-xs font-bold transition-all text-center cursor-pointer ${
+                      sizingMethod === 'consumption'
+                        ? 'bg-slate-900 text-white shadow-xs'
+                        : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
+                    }`}
+                  >
+                    Por Consumo (kWh)
+                  </button>
                 </div>
               </div>
+
+              {/* Mode: Potência Direta em kWp */}
+              {sizingMethod === 'kwp' && (
+                <div className="bg-white p-3 rounded-xl border border-amber-300 shadow-xs">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="text-xs font-bold text-slate-800">
+                      Potência Total que o Técnico vai instalar (kWp) *
+                    </label>
+                    <span className={`text-xs font-bold font-mono px-2 py-0.5 rounded-full border ${
+                      (formData.directSystemPowerKwp || 0) > 0 
+                        ? 'text-amber-700 bg-amber-50 border-amber-300' 
+                        : 'text-slate-400 bg-slate-100 border-slate-200'
+                    }`}>
+                      {(formData.directSystemPowerKwp || 0) > 0 ? `${formData.directSystemPowerKwp} kWp` : '0.00 kWp (Vazio)'}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      min={0}
+                      max={1000}
+                      step="0.1"
+                      placeholder="Digite a quantidade de kWp (ex: 5.5, 10.0)"
+                      value={formData.directSystemPowerKwp ? formData.directSystemPowerKwp : ''}
+                      onChange={(e) => {
+                        const val = parseFloat(e.target.value);
+                        setFormData(prev => ({ ...prev, directSystemPowerKwp: isNaN(val) ? 0 : val }));
+                      }}
+                      className="w-full px-3 py-2 text-xs rounded-lg border border-slate-300 font-semibold focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                    />
+                    <span className="text-xs font-bold text-slate-500 whitespace-nowrap">kWp</span>
+                  </div>
+                  <p className="text-[10px] text-slate-500 mt-1">
+                    Defina diretamente a potência nominal do gerador solar para esta proposta.
+                  </p>
+                </div>
+              )}
+
+              {/* Mode: Quantidade de Placas Direta */}
+              {sizingMethod === 'modules' && (
+                <div className="bg-white p-3 rounded-xl border border-slate-300 shadow-xs">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="text-xs font-bold text-slate-800">
+                      Quantidade de Placas/Módulos a Instalar *
+                    </label>
+                    <span className={`text-xs font-bold font-mono px-2 py-0.5 rounded-full border ${
+                      (formData.directModuleQuantity || 0) > 0 
+                        ? 'text-amber-700 bg-amber-50 border-amber-300' 
+                        : 'text-slate-400 bg-slate-100 border-slate-200'
+                    }`}>
+                      {(formData.directModuleQuantity || 0) > 0 ? `${formData.directModuleQuantity} placas` : '0 placas (Vazio)'}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      min={0}
+                      max={3000}
+                      step="1"
+                      placeholder="Digite o número de placas (ex: 8, 12, 20)"
+                      value={formData.directModuleQuantity ? formData.directModuleQuantity : ''}
+                      onChange={(e) => {
+                        const val = parseInt(e.target.value, 10);
+                        setFormData(prev => ({ ...prev, directModuleQuantity: isNaN(val) ? 0 : val }));
+                      }}
+                      className="w-full px-3 py-2 text-xs rounded-lg border border-slate-300 font-semibold focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                    />
+                    <span className="text-xs font-bold text-slate-500 whitespace-nowrap">unidades</span>
+                  </div>
+                  <p className="text-[10px] text-slate-500 mt-1">
+                    A potência em kWp será calculada automaticamente multiplicando pela potência da placa selecionada.
+                  </p>
+                </div>
+              )}
+
+              {/* Mode: Consumo Médio Mensal em kWh */}
+              {sizingMethod === 'consumption' && (
+                <div className="bg-white p-3 rounded-xl border border-slate-300 shadow-xs">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="text-xs font-bold text-slate-800">
+                      Consumo Médio Mensal da Conta (kWh/mês) *
+                    </label>
+                    <span className={`text-xs font-bold font-mono px-2 py-0.5 rounded-full border ${
+                      formData.monthlyAverageKwh > 0 
+                        ? 'text-amber-700 bg-amber-50 border-amber-300' 
+                        : 'text-slate-400 bg-slate-100 border-slate-200'
+                    }`}>
+                      {formData.monthlyAverageKwh > 0 ? `${formatNumberBR(formData.monthlyAverageKwh)} kWh` : '0 kWh (Vazio)'}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      min={0}
+                      max={100000}
+                      step="10"
+                      placeholder="Digite o consumo mensal (ex: 450, 780)"
+                      value={formData.monthlyAverageKwh ? formData.monthlyAverageKwh : ''}
+                      onChange={(e) => {
+                        const val = parseFloat(e.target.value);
+                        setFormData(prev => ({ ...prev, monthlyAverageKwh: isNaN(val) ? 0 : val }));
+                      }}
+                      className="w-full px-3 py-2 text-xs rounded-lg border border-slate-300 font-semibold focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                    />
+                    <span className="text-xs font-bold text-slate-500 whitespace-nowrap">kWh/mês</span>
+                  </div>
+                  <p className="text-[10px] text-slate-500 mt-1">
+                    O sistema compensará o consumo abatendo a taxa mínima de disponibilidade.
+                  </p>
+                </div>
+              )}
 
               {/* Tariff & Connection Grid */}
               <div className="grid grid-cols-3 gap-2.5 pt-1">
@@ -597,42 +806,53 @@ export const SizingCalculator: React.FC<SizingCalculatorProps> = ({
               <div>
                 <div className="flex items-center justify-between mb-1">
                   <label className="block text-xs font-semibold text-slate-700">
-                    Módulo Fotovoltaico (Placa Solar)
+                    Módulo Fotovoltaico (Placa Solar) *
                   </label>
-                  {selectedModule.unitPrice ? (
+                  {selectedModule?.unitPrice ? (
                     <span className="text-[11px] font-mono font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200/60">
                       {formatCurrencyBRL(selectedModule.unitPrice)}/placa
                     </span>
                   ) : null}
                 </div>
                 <select
-                  value={formData.moduleModelId}
+                  value={formData.moduleModelId || ''}
                   onChange={(e) => setFormData({ ...formData, moduleModelId: e.target.value })}
-                  className="w-full px-2.5 py-2 text-xs rounded-lg border border-slate-300 font-medium bg-white"
+                  className={`w-full px-2.5 py-2 text-xs rounded-lg border font-medium bg-white ${
+                    !formData.moduleModelId ? 'border-amber-300 bg-amber-50/20 text-slate-600' : 'border-slate-300'
+                  }`}
                 >
+                  <option value="">-- Selecione a Placa Fotovoltaica --</option>
                   {storedModules.map((m) => (
                     <option key={m.id || m.model} value={m.model}>
                       {m.brand} • {m.model} ({m.powerWp}Wp) {m.unitPrice ? `• ${formatCurrencyBRL(m.unitPrice)}` : ''}
                     </option>
                   ))}
                 </select>
-                <div className="flex items-center justify-between text-[11px] text-slate-500 mt-1 px-1">
-                  <span>Necessários: <strong>{calculations.moduleQuantity} painéis</strong> ({calculations.systemPowerKwp} kWp)</span>
-                  {selectedModule.unitPrice && (
-                    <span className="font-mono font-semibold text-slate-700">
-                      Subtotal: {formatCurrencyBRL(calculations.moduleQuantity * selectedModule.unitPrice)}
-                    </span>
-                  )}
-                </div>
+                
+                {!formData.moduleModelId ? (
+                  <div className="flex items-center gap-1.5 text-[11px] text-amber-800 bg-amber-50/80 border border-amber-200/80 p-2 rounded-lg mt-1.5">
+                    <AlertCircle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                    <span>Nenhuma placa selecionada. Escolha a placa para calcular a potência e valor.</span>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-between text-[11px] text-slate-500 mt-1 px-1">
+                    <span>Instalação: <strong>{calculations.moduleQuantity} painéis</strong> ({calculations.systemPowerKwp} kWp)</span>
+                    {selectedModule?.unitPrice && (
+                      <span className="font-mono font-semibold text-slate-700">
+                        Subtotal Placas: {formatCurrencyBRL(calculations.moduleQuantity * selectedModule.unitPrice)}
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* Inverter selection */}
               <div>
                 <div className="flex items-center justify-between mb-1">
                   <label className="block text-xs font-semibold text-slate-700">
-                    Inversor Solar Homologado
+                    Inversor Solar Homologado *
                   </label>
-                  {selectedInverter.unitPrice ? (
+                  {selectedInverter?.unitPrice ? (
                     <span className="text-[11px] font-mono font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200/60">
                       {formatCurrencyBRL(selectedInverter.unitPrice)}
                     </span>
@@ -642,7 +862,7 @@ export const SizingCalculator: React.FC<SizingCalculatorProps> = ({
                 <div className="grid grid-cols-2 gap-2 mb-2">
                   <button
                     type="button"
-                    onClick={() => setFormData({ ...formData, inverterTypeId: 'string', inverterModelId: undefined })}
+                    onClick={() => setFormData({ ...formData, inverterTypeId: 'string', inverterModelId: '' })}
                     className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
                       formData.inverterTypeId === 'string'
                         ? 'bg-slate-900 text-white border-slate-900'
@@ -653,7 +873,7 @@ export const SizingCalculator: React.FC<SizingCalculatorProps> = ({
                   </button>
                   <button
                     type="button"
-                    onClick={() => setFormData({ ...formData, inverterTypeId: 'microinversor', inverterModelId: undefined })}
+                    onClick={() => setFormData({ ...formData, inverterTypeId: 'microinversor', inverterModelId: '' })}
                     className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
                       formData.inverterTypeId === 'microinversor'
                         ? 'bg-slate-900 text-white border-slate-900'
@@ -665,20 +885,33 @@ export const SizingCalculator: React.FC<SizingCalculatorProps> = ({
                 </div>
 
                 <select
-                  value={formData.inverterModelId || selectedInverter.model}
+                  value={formData.inverterModelId || ''}
                   onChange={(e) => setFormData({ ...formData, inverterModelId: e.target.value })}
-                  className="w-full px-2.5 py-2 text-xs rounded-lg border border-slate-300 font-medium bg-white"
+                  className={`w-full px-2.5 py-2 text-xs rounded-lg border font-medium bg-white ${
+                    !formData.inverterModelId ? 'border-amber-300 bg-amber-50/20 text-slate-600' : 'border-slate-300'
+                  }`}
                 >
-                  {storedInverters.map((inv) => (
-                    <option key={inv.id || inv.model} value={inv.model}>
-                      {inv.brand} • {inv.model} ({inv.powerKw} kW • {inv.type}) {inv.unitPrice ? `• ${formatCurrencyBRL(inv.unitPrice)}` : ''}
-                    </option>
-                  ))}
+                  <option value="">-- Selecione o Inversor Solar --</option>
+                  {storedInverters
+                    .filter(inv => formData.inverterTypeId === 'microinversor' ? inv.type === 'microinversor' : inv.type !== 'microinversor')
+                    .map((inv) => (
+                      <option key={inv.id || inv.model} value={inv.model}>
+                        {inv.brand} • {inv.model} ({inv.powerKw} kW • {inv.type}) {inv.unitPrice ? `• ${formatCurrencyBRL(inv.unitPrice)}` : ''}
+                      </option>
+                    ))}
                 </select>
-                <div className="flex items-center justify-between text-[11px] text-slate-500 mt-1 px-1">
-                  <span>Recomendado para {calculations.systemPowerKwp} kWp: <strong>{calculations.inverterPowerKw} kW</strong></span>
-                  <span className="font-mono font-semibold text-slate-700">1 unidade</span>
-                </div>
+
+                {!formData.inverterModelId ? (
+                  <div className="flex items-center gap-1.5 text-[11px] text-amber-800 bg-amber-50/80 border border-amber-200/80 p-2 rounded-lg mt-1.5">
+                    <AlertCircle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                    <span>Nenhum inversor selecionado. Escolha o inversor para a proposta.</span>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-between text-[11px] text-slate-500 mt-1 px-1">
+                    <span>Inversor: <strong>{selectedInverter?.brand} ({selectedInverter?.powerKw} kW)</strong></span>
+                    <span className="font-mono font-semibold text-slate-700">1 unidade</span>
+                  </div>
+                )}
               </div>
 
               {/* Exact Cost Breakdown Details Accordion */}
@@ -799,11 +1032,128 @@ export const SizingCalculator: React.FC<SizingCalculatorProps> = ({
             />
           </div>
 
+          {/* Section 5: Attached Photos & Documents (Persistidas no Firebase Cloud) */}
+          <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-xs font-bold uppercase tracking-wider text-slate-800 flex items-center gap-2">
+                <span className="w-5 h-5 rounded-full bg-slate-900 text-white flex items-center justify-center text-[10px]">4</span>
+                Fotos & Documentos de Vistoria
+              </h2>
+              <span className="text-[10px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded font-semibold border border-emerald-200">
+                Salvo no Firebase
+              </span>
+            </div>
+
+            {/* Bill photo upload */}
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                Foto da Fatura de Energia (Conta de Luz)
+              </label>
+              {billPhoto ? (
+                <div className="relative inline-block border border-slate-200 rounded-xl overflow-hidden group">
+                  <img src={billPhoto} alt="Conta de Luz" className="w-32 h-24 object-cover" />
+                  <button
+                    type="button"
+                    onClick={handleRemoveBillPhoto}
+                    className="absolute top-1 right-1 bg-red-600 text-white p-1 rounded-full shadow hover:bg-red-700 transition-colors cursor-pointer"
+                    title="Remover foto da fatura"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                  <span className="absolute bottom-1 left-1 bg-black/60 text-white text-[9px] px-1.5 py-0.5 rounded">
+                    Conta anexada
+                  </span>
+                </div>
+              ) : (
+                <label className="flex items-center gap-2 px-3 py-2 border-2 border-dashed border-slate-300 hover:border-amber-500 rounded-xl cursor-pointer bg-slate-50/50 hover:bg-amber-50/30 transition-colors">
+                  <Camera className="w-4 h-4 text-slate-500" />
+                  <span className="text-xs text-slate-600 font-medium">
+                    {isCompressingPhoto ? 'Comprimindo foto...' : 'Tirar foto ou anexar conta de luz'}
+                  </span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleBillPhotoUpload}
+                    disabled={isCompressingPhoto}
+                    className="hidden"
+                  />
+                </label>
+              )}
+            </div>
+
+            {/* Installation site & roof photos */}
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-xs font-semibold text-slate-700">
+                  Fotos do Telhado / Local de Instalação / Padrão
+                </label>
+                <span className="text-[10px] text-slate-400">Até 6 fotos</span>
+              </div>
+
+              <div className="flex flex-wrap gap-2 items-center">
+                {photos.map((photoUrl, idx) => (
+                  <div key={idx} className="relative border border-slate-200 rounded-xl overflow-hidden group">
+                    <img src={photoUrl} alt={`Foto Local ${idx + 1}`} className="w-20 h-20 object-cover" />
+                    <button
+                      type="button"
+                      onClick={() => handleRemovePhoto(idx)}
+                      className="absolute top-1 right-1 bg-red-600 text-white p-1 rounded-full shadow hover:bg-red-700 transition-colors cursor-pointer"
+                      title="Remover foto"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                    </button>
+                  </div>
+                ))}
+
+                {photos.length < 6 && (
+                  <label className="w-20 h-20 flex flex-col items-center justify-center border-2 border-dashed border-slate-300 hover:border-amber-500 rounded-xl cursor-pointer bg-slate-50 hover:bg-amber-50/40 transition-colors">
+                    <UploadCloud className="w-5 h-5 text-slate-400" />
+                    <span className="text-[10px] text-slate-500 mt-1 font-semibold">+ Foto</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      onChange={handleLocalPhotosUpload}
+                      disabled={isCompressingPhoto}
+                      className="hidden"
+                    />
+                  </label>
+                )}
+              </div>
+            </div>
+
+          </div>
+
         </div>
 
         {/* Right Column: Live Results & Graphs (7 cols) */}
         <div className="lg:col-span-7 space-y-5">
           
+          {/* Status Banner: Proposta Limpa ou Dimensionamento Pronto */}
+          {calculations.systemPowerKwp === 0 ? (
+            <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 text-amber-950 flex items-start gap-3">
+              <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+              <div>
+                <h4 className="text-xs font-bold text-amber-900">Proposta Limpa Iniciada (Sem Valores Pré-carregados)</h4>
+                <p className="text-[11px] text-amber-800 mt-0.5 leading-relaxed">
+                  Todos os dados devem ser definidos pelo instalador. Preencha a <strong>potência (kWp)</strong> ou consumo, selecione a <strong>placa solar</strong> e o <strong>inversor</strong> ao lado para calcular a proposta.
+                </p>
+              </div>
+            </div>
+          ) : (
+            <div className="p-3.5 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-950 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span className="text-xs font-semibold text-emerald-900">
+                  Gerador Definido: <strong>{calculations.systemPowerKwp} kWp</strong> ({calculations.moduleQuantity} placas de {selectedModule?.powerWp}Wp + Inversor {selectedInverter?.brand})
+                </span>
+              </div>
+              <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full whitespace-nowrap">
+                Calculado com Sucesso
+              </span>
+            </div>
+          )}
+
           {/* Main 4 KPI Cards */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             
@@ -813,12 +1163,14 @@ export const SizingCalculator: React.FC<SizingCalculatorProps> = ({
               </span>
               <div className="flex items-baseline gap-1">
                 <span className="text-2xl font-black text-slate-900 font-display">
-                  {calculations.systemPowerKwp}
+                  {calculations.systemPowerKwp.toFixed(2)}
                 </span>
                 <span className="text-xs font-bold text-amber-600">kWp</span>
               </div>
               <span className="text-[11px] text-slate-500 block mt-1">
-                {calculations.moduleQuantity} módulos ({selectedModule.powerWp}W)
+                {calculations.moduleQuantity > 0 
+                  ? `${calculations.moduleQuantity} módulos ${selectedModule ? `(${selectedModule.powerWp}W)` : ''}`
+                  : '0 módulos definidos'}
               </span>
             </div>
 
@@ -832,7 +1184,7 @@ export const SizingCalculator: React.FC<SizingCalculatorProps> = ({
                 </span>
               </div>
               <span className="text-[11px] text-slate-500 block mt-1">
-                Redução de até 95%
+                {calculations.monthlySavings > 0 ? 'Redução de até 95%' : 'R$ 0,00'}
               </span>
             </div>
 
@@ -841,7 +1193,7 @@ export const SizingCalculator: React.FC<SizingCalculatorProps> = ({
                 <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
                   {formData.pricingMode === 'equipment_exact' ? 'Investimento Exato' : 'Investimento Estimado'}
                 </span>
-                {formData.pricingMode === 'equipment_exact' && (
+                {formData.pricingMode === 'equipment_exact' && calculations.totalInvestment > 0 && (
                   <span className="text-[9px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
                     Real
                   </span>
@@ -853,7 +1205,9 @@ export const SizingCalculator: React.FC<SizingCalculatorProps> = ({
                 </span>
               </div>
               <span className="text-[11px] text-slate-500 block mt-1">
-                {formData.pricingMode === 'equipment_exact' ? 'Equipamentos + BDI calculados' : 'Equipamento + Instalação'}
+                {calculations.totalInvestment > 0 
+                  ? (formData.pricingMode === 'equipment_exact' ? 'Equipamentos + BDI calculados' : 'Equipamento + Instalação')
+                  : 'R$ 0,00'}
               </span>
             </div>
 
@@ -868,7 +1222,7 @@ export const SizingCalculator: React.FC<SizingCalculatorProps> = ({
                 <span className="text-xs font-bold text-slate-600">anos</span>
               </div>
               <span className="text-[11px] text-slate-500 block mt-1">
-                ~{calculations.paybackMonths} meses
+                {calculations.paybackMonths > 0 ? `~${calculations.paybackMonths} meses` : '0 meses'}
               </span>
             </div>
 
@@ -923,32 +1277,42 @@ export const SizingCalculator: React.FC<SizingCalculatorProps> = ({
                   Curva de Geração Solar vs Consumo (12 Meses)
                 </h3>
                 <p className="text-[11px] text-slate-500">
-                  Geração média mensal de {formatNumberBR(calculations.monthlyAverageGenerationKwh)} kWh com sazonalidade solar.
+                  {calculations.systemPowerKwp > 0
+                    ? `Geração média mensal de ${formatNumberBR(calculations.monthlyAverageGenerationKwh)} kWh com sazonalidade solar.`
+                    : 'Aguardando preenchimento dos equipamentos para projetar a curva de geração.'}
                 </p>
               </div>
             </div>
 
-            <div className="h-64 w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={calculations.monthlyBreakdown} margin={{ top: 10, right: 10, left: -15, bottom: 0 }}>
-                  <XAxis dataKey="month" tick={{ fontSize: 11 }} />
-                  <YAxis tick={{ fontSize: 11 }} unit=" kWh" />
-                  <Tooltip 
-                    formatter={(value: any, name: any) => [
-                      `${value} kWh`, 
-                      name === 'generationKwh' ? 'Geração Solar' : 'Consumo do Imóvel'
-                    ]}
-                  />
-                  <Legend 
-                    verticalAlign="top" 
-                    height={30}
-                    formatter={(val) => val === 'generationKwh' ? 'Geração Fotovoltaica Estimada' : 'Consumo Médio'}
-                  />
-                  <Bar dataKey="generationKwh" fill="#f59e0b" radius={[4, 4, 0, 0]} name="generationKwh" />
-                  <Bar dataKey="consumptionKwh" fill="#94a3b8" radius={[4, 4, 0, 0]} name="consumptionKwh" />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
+            {calculations.systemPowerKwp > 0 ? (
+              <div className="h-64 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={calculations.monthlyBreakdown} margin={{ top: 10, right: 10, left: -15, bottom: 0 }}>
+                    <XAxis dataKey="month" tick={{ fontSize: 11 }} />
+                    <YAxis tick={{ fontSize: 11 }} unit=" kWh" />
+                    <Tooltip 
+                      formatter={(value: any, name: any) => [
+                        `${value} kWh`, 
+                        name === 'generationKwh' ? 'Geração Solar' : 'Consumo do Imóvel'
+                      ]}
+                    />
+                    <Legend 
+                      verticalAlign="top" 
+                      height={30}
+                      formatter={(val) => val === 'generationKwh' ? 'Geração Fotovoltaica Estimada' : 'Consumo Médio'}
+                    />
+                    <Bar dataKey="generationKwh" fill="#f59e0b" radius={[4, 4, 0, 0]} name="generationKwh" />
+                    <Bar dataKey="consumptionKwh" fill="#94a3b8" radius={[4, 4, 0, 0]} name="consumptionKwh" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            ) : (
+              <div className="h-44 flex flex-col items-center justify-center bg-slate-50/60 rounded-xl border border-dashed border-slate-200 text-center p-4">
+                <Sun className="w-8 h-8 text-slate-300 mb-2" />
+                <span className="text-xs font-semibold text-slate-600">Gráfico aguardando definição dos equipamentos</span>
+                <span className="text-[11px] text-slate-400 mt-0.5">Selecione a placa, inversor e potência para traçar a curva de geração</span>
+              </div>
+            )}
           </div>
 
           {/* Technical Specifications Summary */}
@@ -962,7 +1326,9 @@ export const SizingCalculator: React.FC<SizingCalculatorProps> = ({
               <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-100">
                 <span className="text-slate-500 block text-[10px]">Módulos Solares</span>
                 <span className="font-bold text-slate-800">{calculations.moduleQuantity} painéis</span>
-                <span className="text-[10px] text-slate-500 block">{selectedModule.brand} {selectedModule.powerWp}W</span>
+                <span className="text-[10px] text-slate-500 block truncate">
+                  {selectedModule ? `${selectedModule.brand} ${selectedModule.powerWp}W` : 'Não selecionado'}
+                </span>
               </div>
 
               <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-100">
@@ -972,9 +1338,11 @@ export const SizingCalculator: React.FC<SizingCalculatorProps> = ({
               </div>
 
               <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-100">
-                <span className="text-slate-500 block text-[10px]">Inversor Sugerido</span>
+                <span className="text-slate-500 block text-[10px]">Inversor Selecionado</span>
                 <span className="font-bold text-slate-800">{calculations.inverterPowerKw} kW</span>
-                <span className="text-[10px] text-slate-500 block">{selectedInverter.brand} {selectedInverter.type}</span>
+                <span className="text-[10px] text-slate-500 block truncate">
+                  {selectedInverter ? `${selectedInverter.brand} (${selectedInverter.type})` : 'Não selecionado'}
+                </span>
               </div>
 
               <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-100">
@@ -999,31 +1367,37 @@ export const SizingCalculator: React.FC<SizingCalculatorProps> = ({
               </span>
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-              {[
-                { months: 24, mult: 1.18 },
-                { months: 36, mult: 1.28 },
-                { months: 60, mult: 1.48 },
-                { months: 72, mult: 1.58 },
-              ].map((p) => {
-                const installment = Math.round((calculations.totalInvestment * p.mult) / p.months);
-                const isUnderSavings = installment <= calculations.monthlySavings;
-                return (
-                  <div key={p.months} className="bg-slate-800/80 p-3 rounded-xl border border-slate-700">
-                    <span className="text-[10px] text-slate-400 font-semibold block">{p.months} parcelas</span>
-                    <span className="text-base font-extrabold text-amber-400 block mt-0.5">
-                      {formatCurrencyBRL(installment)}
-                    </span>
-                    <span className="text-[9px] text-slate-400 block">ao mês</span>
-                    {isUnderSavings && (
-                      <span className="text-[9px] text-emerald-400 font-bold block mt-1">
-                        ✓ Paga com a economia
+            {calculations.totalInvestment > 0 ? (
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                {[
+                  { months: 24, mult: 1.18 },
+                  { months: 36, mult: 1.28 },
+                  { months: 60, mult: 1.48 },
+                  { months: 72, mult: 1.58 },
+                ].map((p) => {
+                  const installment = Math.round((calculations.totalInvestment * p.mult) / p.months);
+                  const isUnderSavings = installment <= calculations.monthlySavings && calculations.monthlySavings > 0;
+                  return (
+                    <div key={p.months} className="bg-slate-800/80 p-3 rounded-xl border border-slate-700">
+                      <span className="text-[10px] text-slate-400 font-semibold block">{p.months} parcelas</span>
+                      <span className="text-base font-extrabold text-amber-400 block mt-0.5">
+                        {formatCurrencyBRL(installment)}
                       </span>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
+                      <span className="text-[9px] text-slate-400 block">ao mês</span>
+                      {isUnderSavings && (
+                        <span className="text-[9px] text-emerald-400 font-bold block mt-1">
+                          ✓ Paga com a economia
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="p-3 bg-slate-800/50 rounded-xl border border-slate-700/60 text-center text-xs text-slate-400">
+                As parcelas do financiamento serão calculadas assim que a potência e equipamentos forem selecionados.
+              </div>
+            )}
           </div>
 
           {/* Environmental Impact Banner */}
@@ -1044,7 +1418,12 @@ export const SizingCalculator: React.FC<SizingCalculatorProps> = ({
               type="button"
               id="btn-generate-proposal-bottom"
               onClick={handleCreateProposal}
-              className="flex items-center gap-1.5 px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl shadow transition-all active:scale-95 whitespace-nowrap"
+              disabled={calculations.systemPowerKwp === 0 || !formData.moduleModelId || !formData.inverterModelId}
+              className={`flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-xl shadow transition-all whitespace-nowrap ${
+                calculations.systemPowerKwp > 0 && formData.moduleModelId && formData.inverterModelId
+                  ? 'bg-slate-900 hover:bg-slate-800 text-white active:scale-95 cursor-pointer'
+                  : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+              }`}
             >
               <span>Gerar Proposta</span>
               <ArrowRight className="w-3.5 h-3.5" />

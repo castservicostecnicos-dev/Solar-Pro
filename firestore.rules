@@ -1,0 +1,27 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Propostas fotovoltaicas e CRM
+    match /proposals/{proposalId} {
+      allow read, write: if true;
+    }
+
+    // Usuários e permissões
+    match /users/{userId} {
+      allow read, write: if true;
+    }
+
+    // Catálogo de Módulos e Inversores
+    match /modules/{moduleId} {
+      allow read, write: if true;
+    }
+    match /inverters/{inverterId} {
+      allow read, write: if true;
+    }
+
+    // Logs de auditoria
+    match /logs/{logId} {
+      allow read, write: if true;
+    }
+  }
+}

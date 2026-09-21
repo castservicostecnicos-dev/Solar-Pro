@@ -1,0 +1,93 @@
+{
+  "$schema": "https://firebase.google.com/schemas/firestore/blueprint.json",
+  "entities": {
+    "proposals": {
+      "type": "collection",
+      "description": "Propostas solares comerciais geradas, dimensionamentos, assinaturas digitais e histórico",
+      "fields": {
+        "id": { "type": "string", "description": "ID único da proposta" },
+        "proposalNumber": { "type": "string", "description": "Código identificador da proposta (ex: PROP-2026-001)" },
+        "createdAt": { "type": "string", "description": "Data de criação ISO" },
+        "updatedAt": { "type": "string", "description": "Data da última modificação ISO" },
+        "validUntil": { "type": "string", "description": "Data de validade da proposta" },
+        "status": { "type": "string", "description": "Status no funil CRM (novo_lead, dimensionamento, proposta_enviada, etc.)" },
+        "client": { "type": "map", "description": "Dados do cliente (nome, documento, telefone, cidade, concessionária)" },
+        "technical": { "type": "map", "description": "Especificações técnicas dimensionadas, módulos, inversores, área" },
+        "financial": { "type": "map", "description": "Resultados financeiros, investimento, economia, payback" },
+        "executiveSummary": { "type": "string", "description": "Apresentação executiva ou pitch comercial gerado por IA" },
+        "payments": { "type": "array", "description": "Parcelas e plano de pagamento" },
+        "signature": { "type": "map", "description": "Dados da assinatura digital, validação hash e rubrica" },
+        "followUps": { "type": "array", "description": "Histórico de atividades comerciais e follow-ups" },
+        "internalNotes": { "type": "string", "description": "Notas internas do integrador" }
+      }
+    },
+    "users": {
+      "type": "collection",
+      "description": "Usuários do sistema: Administrador Desenvolvedor (DEV) e Clientes Integradores",
+      "fields": {
+        "id": { "type": "string", "description": "ID único do usuário" },
+        "username": { "type": "string", "description": "Nome de usuário para login" },
+        "password": { "type": "string", "description": "Senha de acesso" },
+        "name": { "type": "string", "description": "Nome completo da pessoa ou integrador" },
+        "role": { "type": "string", "description": "Papel de acesso: 'dev' ou 'cliente'" },
+        "email": { "type": "string", "description": "E-mail de contato" },
+        "document": { "type": "string", "description": "CPF ou CNPJ cadastrado" },
+        "company": { "type": "string", "description": "Nome da empresa ou integradora" },
+        "phone": { "type": "string", "description": "Telefone e WhatsApp do usuário" },
+        "status": { "type": "string", "description": "Status do usuário: 'ativo' ou 'bloqueado'" },
+        "createdAt": { "type": "string", "description": "Data de cadastro ISO" },
+        "lastLogin": { "type": "string", "description": "Último acesso realizado" },
+        "passwordResetAt": { "type": "string", "description": "Data da última redefinição de senha" },
+        "notes": { "type": "string", "description": "Notas administrativas internas" }
+      }
+    },
+    "modules": {
+      "type": "collection",
+      "description": "Catálogo de módulos fotovoltaicos cadastrados",
+      "fields": {
+        "id": { "type": "string", "description": "ID do módulo" },
+        "model": { "type": "string", "description": "Modelo comercial do módulo" },
+        "brand": { "type": "string", "description": "Marca ou fabricante" },
+        "powerWp": { "type": "number", "description": "Potência unitária em Watts-pico" },
+        "efficiency": { "type": "number", "description": "Eficiência percentual do módulo" },
+        "warrantyYears": { "type": "number", "description": "Anos de garantia" },
+        "unitPrice": { "type": "number", "description": "Preço unitário em Reais" },
+        "technology": { "type": "string", "description": "Tecnologia da célula solar" },
+        "supplier": { "type": "string", "description": "Fornecedor / Distribuidor" },
+        "notes": { "type": "string", "description": "Observações técnicas" },
+        "createdAt": { "type": "string", "description": "Data de cadastro ISO" }
+      }
+    },
+    "inverters": {
+      "type": "collection",
+      "description": "Catálogo de inversores fotovoltaicos cadastrados",
+      "fields": {
+        "id": { "type": "string", "description": "ID do inversor" },
+        "model": { "type": "string", "description": "Modelo comercial do inversor" },
+        "brand": { "type": "string", "description": "Marca ou fabricante" },
+        "powerKw": { "type": "number", "description": "Potência nominal em kW" },
+        "type": { "type": "string", "description": "Tipo: string, microinversor ou hibrido" },
+        "warrantyYears": { "type": "number", "description": "Anos de garantia" },
+        "unitPrice": { "type": "number", "description": "Preço unitário em Reais" },
+        "voltage": { "type": "string", "description": "Tensão e padrão elétrico" },
+        "mpptCount": { "type": "number", "description": "Quantidade de MPPTs" },
+        "supplier": { "type": "string", "description": "Fornecedor / Distribuidor" },
+        "notes": { "type": "string", "description": "Observações técnicas" },
+        "createdAt": { "type": "string", "description": "Data de cadastro ISO" }
+      }
+    },
+    "logs": {
+      "type": "collection",
+      "description": "Logs de auditoria de acessos e logins",
+      "fields": {
+        "id": { "type": "string", "description": "ID do log" },
+        "timestamp": { "type": "string", "description": "Momento do registro" },
+        "username": { "type": "string", "description": "Login utilizado" },
+        "name": { "type": "string", "description": "Nome associado" },
+        "role": { "type": "string", "description": "Papel informado" },
+        "status": { "type": "string", "description": "Resultado: sucesso, falha ou bloqueado" },
+        "details": { "type": "string", "description": "Detalhes adicionais" }
+      }
+    }
+  }
+}

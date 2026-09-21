@@ -72,35 +72,35 @@ export const Navbar: React.FC<NavbarProps> = ({
   return (
     <>
       {/* Top Header */}
-      <header className="sticky top-0 z-40 bg-slate-900 border-b border-slate-800 text-white shadow-lg">
-        <div className="max-w-7xl w-full mx-auto px-3 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-14 sm:h-16">
+      <header className="sticky top-0 z-40 bg-slate-900 border-b border-slate-800 text-white shadow-lg w-full">
+        <div className="max-w-7xl w-full mx-auto px-2.5 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between h-14 sm:h-16 gap-2">
             
             {/* Logo & Brand */}
             <div 
-              className="flex items-center gap-2.5 sm:gap-3 select-none cursor-pointer" 
+              className="flex items-center gap-2 select-none cursor-pointer min-w-0 shrink" 
               onClick={() => !isDev && setActiveTab('crm')}
             >
               <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-tr from-amber-500 to-amber-300 flex items-center justify-center shadow-md shadow-amber-500/20 text-slate-950 font-bold shrink-0">
                 <Sun className="w-5 h-5 sm:w-6 sm:h-6 animate-spin-slow" />
               </div>
-              <div>
-                <div className="flex items-center gap-1.5">
-                  <div className="flex items-baseline gap-1">
-                    <span className="font-black text-amber-400 text-base sm:text-lg tracking-tight font-display">CAST</span>
-                    <span className="font-bold text-base sm:text-lg tracking-tight text-white font-display">SolarPro</span>
+              <div className="min-w-0">
+                <div className="flex items-center gap-1">
+                  <div className="flex items-baseline">
+                    <span className="font-black text-amber-400 text-sm sm:text-lg tracking-tight font-display">CAST</span>
+                    <span className="font-bold text-sm sm:text-lg tracking-tight text-white font-display hidden xs:inline ml-0.5">SolarPro</span>
                   </div>
-                  <span className="text-[9px] sm:text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                  <span className="text-[9px] sm:text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-400 border border-amber-500/30 hidden xs:inline-block">
                     {isDev ? 'DEV' : 'PWA'}
                   </span>
                 </div>
-                <p className="text-[11px] text-slate-400 hidden sm:block">
+                <p className="text-[11px] text-slate-400 hidden sm:block truncate">
                   {isDev ? 'Painel Administrativo - Gestão de Clientes' : 'CAST Engenharia & Energia Solar'}
                 </p>
               </div>
             </div>
 
-            {/* If DEV: Show exclusive DEV badge */}
+            {/* If DEV: Show exclusive DEV badge on desktop */}
             {isDev ? (
               <div className="hidden md:flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-indigo-950/60 border border-indigo-500/30 text-indigo-300 text-xs font-semibold">
                 <ShieldCheck className="w-4 h-4 text-amber-400" />
@@ -134,8 +134,17 @@ export const Navbar: React.FC<NavbarProps> = ({
             )}
 
             {/* Actions, User Info & Status Header Area */}
-            <div className="flex items-center gap-1.5 sm:gap-2.5">
+            <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
               
+              {/* Cloud DB Sync status badge */}
+              <div 
+                title="Persistência em Nuvem Ativa (Firebase Firestore): Dados, clientes, fotos e propostas salvos no Google Cloud"
+                className="hidden xl:flex items-center gap-1.5 text-[10px] font-semibold px-2.5 py-1 rounded-full bg-emerald-950/40 border border-emerald-500/30 text-emerald-400"
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                <span>Banco na Nuvem Ativo</span>
+              </div>
+
               {/* Online / Offline status badge */}
               <div 
                 title={isOnline ? "Conectado à internet" : "Modo Offline PWA ativo"}
@@ -151,65 +160,67 @@ export const Navbar: React.FC<NavbarProps> = ({
                 </span>
               </div>
 
-              {/* Install PWA Button (Available for client app) */}
+              {/* Install PWA Button (Available for client app on tablet/desktop) */}
               {!isDev && !isStandalone && (
                 <button
                   id="btn-install-pwa"
                   type="button"
                   onClick={onOpenInstallModal}
                   title="Instalar aplicativo CAST SolarPro no celular ou computador"
-                  className="hidden sm:flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-[11px] font-semibold text-amber-400 transition-colors shadow-sm"
+                  className="hidden md:flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-[11px] font-semibold text-amber-400 transition-colors shadow-sm"
                 >
                   <Smartphone className="w-3.5 h-3.5 text-amber-400" />
                   <span>Instalar</span>
                 </button>
               )}
 
-              {/* Primary Action Button (Only for clients) */}
+              {/* Primary Action Button (Only for clients on screens sm+) */}
               {!isDev && (
                 <button
                   id="btn-new-proposal"
                   type="button"
                   onClick={onNewProposal}
-                  className="flex items-center gap-1 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-bold shadow-md shadow-amber-500/20 transition-all active:scale-95 cursor-pointer"
+                  title="Criar Nova Proposta"
+                  className="hidden sm:flex items-center gap-1 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-bold shadow-md shadow-amber-500/20 transition-all active:scale-95 cursor-pointer shrink-0"
                 >
                   <PlusCircle className="w-3.5 h-3.5" />
-                  <span className="hidden sm:inline">Nova Proposta</span>
-                  <span className="sm:hidden">Novo</span>
+                  <span>Nova Proposta</span>
                 </button>
               )}
 
-              {/* Logged User Badge & Logout */}
+              {/* Logged User Badge - Visible only on sm+ to prevent horizontal squeezing on mobile */}
               {currentUser && (
-                <div className="flex items-center gap-1.5 pl-1 sm:pl-2 border-l border-slate-800">
-                  <div 
-                    title={`Logado como: ${currentUser.name} (${currentUser.role === 'dev' ? 'DEV Master' : 'Cliente'})`}
-                    className={`flex items-center gap-1.5 px-2 py-1 rounded-xl border text-xs select-none ${
-                      isDev
-                        ? 'bg-indigo-950/70 border-indigo-500/40 text-indigo-300'
-                        : 'bg-slate-800 border-slate-700 text-slate-200'
-                    }`}
-                  >
-                    {isDev ? (
-                      <ShieldCheck className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                    ) : (
-                      <User className="w-3.5 h-3.5 text-sky-400 shrink-0" />
-                    )}
-                    <span className="font-semibold truncate max-w-[80px] sm:max-w-[120px]">
-                      {isDev ? 'DEV Master' : currentUser.name.split(' ')[0]}
-                    </span>
-                  </div>
-
-                  <button
-                    id="btn-logout"
-                    type="button"
-                    onClick={onLogout}
-                    title="Sair da conta"
-                    className="p-1.5 rounded-xl text-slate-400 hover:text-rose-400 hover:bg-rose-950/40 border border-transparent hover:border-rose-500/30 transition-all cursor-pointer"
-                  >
-                    <LogOut className="w-4 h-4" />
-                  </button>
+                <div 
+                  title={`Logado como: ${currentUser.name} (${currentUser.role === 'dev' ? 'DEV Master' : 'Cliente'})`}
+                  className={`hidden sm:flex items-center gap-1.5 px-2 py-1 rounded-xl border text-xs select-none shrink-0 ${
+                    isDev
+                      ? 'bg-indigo-950/70 border-indigo-500/40 text-indigo-300'
+                      : 'bg-slate-800 border-slate-700 text-slate-200'
+                  }`}
+                >
+                  {isDev ? (
+                    <ShieldCheck className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                  ) : (
+                    <User className="w-3.5 h-3.5 text-sky-400 shrink-0" />
+                  )}
+                  <span className="font-semibold truncate max-w-[80px] sm:max-w-[120px]">
+                    {isDev ? 'DEV Master' : currentUser.name.split(' ')[0]}
+                  </span>
                 </div>
+              )}
+
+              {/* Botão Sair - SEMPRE visível, garantido 100% dentro dos limites da tela no celular */}
+              {currentUser && (
+                <button
+                  id="btn-logout"
+                  type="button"
+                  onClick={onLogout}
+                  title="Sair da conta (Deslogar)"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-white bg-rose-600 hover:bg-rose-500 active:bg-rose-700 border border-rose-400/50 transition-all cursor-pointer shadow-sm active:scale-95 shrink-0"
+                >
+                  <LogOut className="w-3.5 h-3.5 text-white shrink-0" />
+                  <span className="font-bold">Sair</span>
+                </button>
               )}
 
             </div>
