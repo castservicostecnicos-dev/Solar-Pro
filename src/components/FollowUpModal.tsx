@@ -14,6 +14,7 @@ import {
 import { SolarProposal, FollowUpActivity } from '../types';
 import { FOLLOW_UP_TEMPLATES } from '../data/solarDefaults';
 import { formatCurrencyBRL } from '../utils/solarCalculations';
+import { generateFollowUpMessage } from '../lib/solarAi';
 
 interface FollowUpModalProps {
   proposal: SolarProposal;
@@ -67,21 +68,16 @@ export const FollowUpModal: React.FC<FollowUpModalProps> = ({
   const handleGenerateAiMessage = async () => {
     setIsGeneratingAi(true);
     try {
-      const res = await fetch('/api/ai/followup', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          clientName: proposal.client.name,
-          daysSinceSent: Math.max(Math.floor((Date.now() - new Date(proposal.createdAt).getTime()) / (1000 * 60 * 60 * 24)), 1),
-          proposalValue: proposal.financial.totalInvestment,
-          status: proposal.status,
-          objection: objectionText || undefined,
-        }),
+      const msg = await generateFollowUpMessage({
+        clientName: proposal.client.name,
+        daysSinceSent: Math.max(Math.floor((Date.now() - new Date(proposal.createdAt).getTime()) / (1000 * 60 * 60 * 24)), 1),
+        proposalValue: proposal.financial.totalInvestment,
+        status: proposal.status,
+        objection: objectionText || undefined,
+        systemKwp: proposal.technical.systemPowerKwp,
+        monthlySavings: proposal.financial.monthlySavings,
       });
-      const data = await res.json();
-      if (data.message) {
-        setCustomMessage(data.message);
-      }
+      setCustomMessage(msg);
     } catch {
       // Fallback
       setCustomMessage(

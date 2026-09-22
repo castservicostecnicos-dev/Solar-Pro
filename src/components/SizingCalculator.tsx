@@ -28,6 +28,7 @@ import {
   AlertCircle
 } from 'lucide-react';
 import { compressImageFile } from '../utils/imageCompressor';
+import { generateSolarPitch } from '../lib/solarAi';
 import { 
   BarChart, 
   Bar, 
@@ -201,23 +202,17 @@ export const SizingCalculator: React.FC<SizingCalculatorProps> = ({
   const handleGenerateAiPitch = async () => {
     setIsGeneratingAi(true);
     try {
-      const res = await fetch('/api/ai/pitch', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          clientName: formData.clientName || 'Cliente',
-          systemKwp: calculations.systemPowerKwp,
-          monthlySavings: calculations.monthlySavings,
-          investment: calculations.totalInvestment,
-          paybackYears: calculations.paybackYears,
-          roofType: formData.roofType,
-          state: formData.clientState,
-        }),
+      const pitch = await generateSolarPitch({
+        clientName: formData.clientName || 'Cliente',
+        systemKwp: calculations.systemPowerKwp,
+        monthlySavings: calculations.monthlySavings,
+        investment: calculations.totalInvestment,
+        paybackYears: calculations.paybackYears,
+        roofType: formData.roofType,
+        state: formData.clientState,
+        twentyFiveYearSavings: calculations.twentyFiveYearSavings,
       });
-      const data = await res.json();
-      if (data.text) {
-        setAiPitch(data.text);
-      }
+      setAiPitch(pitch);
     } catch {
       // Fallback
       setAiPitch(
