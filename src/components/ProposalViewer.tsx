@@ -23,7 +23,7 @@ import {
 } from 'lucide-react';
 import { SolarProposal, DigitalSignatureData } from '../types';
 import { generateProposalPDF } from '../utils/pdfGenerator';
-import { formatCurrencyBRL, formatNumberBR } from '../utils/solarCalculations';
+import { formatCurrencyBRL, formatNumberBR, buildWhatsAppUrl, openExternalUrl } from '../utils/solarCalculations';
 import { DigitalSignatureModal } from './DigitalSignatureModal';
 import { compressImageFile } from '../utils/imageCompressor';
 import { saveProposal } from '../utils/storage';
@@ -76,12 +76,8 @@ export const ProposalViewer: React.FC<ProposalViewerProps> = ({
   };
 
   const handleSendWhatsApp = () => {
-    const phone = proposal.client.phone.replace(/\D/g, '');
-    const cleanPhone = phone.startsWith('55') ? phone : `55${phone}`;
-    const text = encodeURIComponent(
-      `Olá ${proposal.client.name}! ☀️\n\nSegue o resumo da sua proposta técnica fotovoltaica de ${proposal.technical.systemPowerKwp} kWp:\n\n• Economia Mensal Estimada: ${formatCurrencyBRL(proposal.financial.monthlySavings)}\n• Economia em 25 anos: ${formatCurrencyBRL(proposal.financial.twentyFiveYearSavings)}\n• Retorno do investimento (Payback): ${proposal.financial.paybackYears} anos\n• Equipamentos Tier 1: ${proposal.technical.moduleCount} módulos ${proposal.technical.module.brand} (${proposal.technical.module.powerWp}W) + Inversor ${proposal.technical.inverter.brand}\n\nVocê pode assinar digitalmente e garantir as condições especiais! Abraços da equipe CAST Solar.`
-    );
-    window.open(`https://wa.me/${cleanPhone}?text=${text}`, '_blank');
+    const message = `Olá ${proposal.client.name}! ☀️\n\nSegue o resumo da sua proposta técnica fotovoltaica de ${proposal.technical.systemPowerKwp} kWp:\n\n• Economia Mensal Estimada: ${formatCurrencyBRL(proposal.financial.monthlySavings)}\n• Economia em 25 anos: ${formatCurrencyBRL(proposal.financial.twentyFiveYearSavings)}\n• Retorno do investimento (Payback): ${proposal.financial.paybackYears} anos\n• Equipamentos Tier 1: ${proposal.technical.moduleCount} módulos ${proposal.technical.module.brand} (${proposal.technical.module.powerWp}W) + Inversor ${proposal.technical.inverter.brand}\n\nVocê pode assinar digitalmente e garantir as condições especiais! Abraços da equipe CAST Solar.`;
+    openExternalUrl(buildWhatsAppUrl(proposal.client.phone, message));
   };
 
   const handleCopySummary = () => {
@@ -261,25 +257,21 @@ export const ProposalViewer: React.FC<ProposalViewerProps> = ({
               <div className="p-4 rounded-xl bg-slate-50 border border-slate-200">
                 <span className="text-[10px] font-semibold text-slate-500 uppercase block">Potência Pico</span>
                 <span className="text-xl font-bold text-slate-900 block mt-1">{proposal.technical.systemPowerKwp} kWp</span>
-                <span className="text-[10px] text-slate-500">Capacidade geradora</span>
               </div>
 
               <div className="p-4 rounded-xl bg-slate-50 border border-slate-200">
                 <span className="text-[10px] font-semibold text-slate-500 uppercase block">Módulos Fotovoltaicos</span>
                 <span className="text-xl font-bold text-slate-900 block mt-1">{proposal.technical.moduleCount} painéis</span>
-                <span className="text-[10px] text-slate-500">{proposal.technical.module.powerWp}W {proposal.technical.module.brand}</span>
               </div>
 
               <div className="p-4 rounded-xl bg-slate-50 border border-slate-200">
                 <span className="text-[10px] font-semibold text-slate-500 uppercase block">Geração Estimada</span>
                 <span className="text-xl font-bold text-amber-600 block mt-1">{formatNumberBR(proposal.financial.monthlyAverageGenerationKwh)} kWh</span>
-                <span className="text-[10px] text-slate-500">Média mensal</span>
               </div>
 
               <div className="p-4 rounded-xl bg-slate-50 border border-slate-200">
                 <span className="text-[10px] font-semibold text-slate-500 uppercase block">Área & Telhado</span>
                 <span className="text-xl font-bold text-slate-900 block mt-1">{proposal.technical.areaM2} m²</span>
-                <span className="text-[10px] text-slate-500">Telha {proposal.technical.roofType}</span>
               </div>
             </div>
 
@@ -337,7 +329,6 @@ export const ProposalViewer: React.FC<ProposalViewerProps> = ({
                 <span className="text-2xl font-black text-emerald-700 block mt-1">
                   {formatCurrencyBRL(proposal.financial.monthlySavings)}
                 </span>
-                <span className="text-[10px] text-emerald-600">Redução de até 95% na conta</span>
               </div>
 
               <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200">
@@ -345,7 +336,6 @@ export const ProposalViewer: React.FC<ProposalViewerProps> = ({
                 <span className="text-2xl font-black text-emerald-700 block mt-1">
                   {formatCurrencyBRL(proposal.financial.annualSavings)}
                 </span>
-                <span className="text-[10px] text-emerald-600">Total poupado em 12 meses</span>
               </div>
 
               <div className="p-4 rounded-xl bg-amber-50 border border-amber-200">
@@ -353,7 +343,6 @@ export const ProposalViewer: React.FC<ProposalViewerProps> = ({
                 <span className="text-2xl font-black text-amber-900 block mt-1">
                   {formatCurrencyBRL(proposal.financial.twentyFiveYearSavings)}
                 </span>
-                <span className="text-[10px] text-amber-700">Considerando inflação da energia</span>
               </div>
             </div>
           </div>
@@ -368,9 +357,6 @@ export const ProposalViewer: React.FC<ProposalViewerProps> = ({
                 <div className="text-3xl font-black font-display text-white mt-1">
                   {formatCurrencyBRL(proposal.financial.totalInvestment)}
                 </div>
-                <p className="text-xs text-slate-400 mt-1">
-                  Inclui equipamentos, estruturas, cabos solares, engenharia com ART e homologação.
-                </p>
               </div>
 
               <div className="text-right">
@@ -383,12 +369,9 @@ export const ProposalViewer: React.FC<ProposalViewerProps> = ({
             {/* Payment Options Grid */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
               <div className="bg-slate-800/80 p-4 rounded-xl border border-slate-700">
-                <span className="text-xs font-bold text-amber-400 block">Opção 1: À Vista com 5% de Desconto</span>
+                <span className="text-xs font-bold text-amber-400 block">Opção 1: À Vista</span>
                 <span className="text-xl font-bold text-white block mt-1">
                   {formatCurrencyBRL(Math.round(proposal.financial.totalInvestment * 0.95))}
-                </span>
-                <span className="text-xs text-slate-400 block mt-1">
-                  Sinal no aceite + saldo na entrega dos equipamentos.
                 </span>
               </div>
 
@@ -396,9 +379,6 @@ export const ProposalViewer: React.FC<ProposalViewerProps> = ({
                 <span className="text-xs font-bold text-amber-400 block">Opção 2: Financiamento Solar Bancário</span>
                 <span className="text-xl font-bold text-white block mt-1">
                   72x de ~{formatCurrencyBRL(Math.round((proposal.financial.totalInvestment * 1.58) / 72))}
-                </span>
-                <span className="text-xs text-slate-400 block mt-1">
-                  Sem entrada • Carência de até 90 dias • Substitui a fatura de luz!
                 </span>
               </div>
             </div>

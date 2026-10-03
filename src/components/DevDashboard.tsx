@@ -8,6 +8,7 @@ import {
   toggleUserStatus,
   initFirestoreSync 
 } from '../utils/storage';
+import { buildWhatsAppUrl } from '../utils/solarCalculations';
 import { 
   ShieldCheck, 
   Users, 
@@ -77,6 +78,12 @@ export const DevDashboard: React.FC<DevDashboardProps> = ({ currentUser, onLogou
   // Modal for Share Credentials
   const [shareUserModal, setShareUserModal] = useState<AppUser | null>(null);
   const [copiedShareText, setCopiedShareText] = useState(false);
+  const [toastMsg, setToastMsg] = useState<string | null>(null);
+
+  const showToast = (msg: string) => {
+    setToastMsg(msg);
+    setTimeout(() => setToastMsg(null), 3500);
+  };
 
   const refreshData = () => {
     setUsers(getStoredUsers());
@@ -134,7 +141,7 @@ export const DevDashboard: React.FC<DevDashboardProps> = ({ currentUser, onLogou
   const handleSaveUser = (e: React.FormEvent) => {
     e.preventDefault();
     if (!userFormData.name.trim() || !userFormData.username.trim() || !userFormData.password.trim()) {
-      alert('Por favor preencha nome, login e senha do cliente.');
+      showToast('Por favor preencha nome, login e senha do cliente.');
       return;
     }
 
@@ -172,7 +179,7 @@ export const DevDashboard: React.FC<DevDashboardProps> = ({ currentUser, onLogou
 
   const handleOpenDelete = (user: AppUser) => {
     if (user.role === 'dev') {
-      alert('O usuário Desenvolvedor Master é protegido e não pode ser excluído.');
+      showToast('O usuário Desenvolvedor Master é protegido e não pode ser excluído.');
       return;
     }
     setDeleteConfirmModal(user);
@@ -195,7 +202,7 @@ export const DevDashboard: React.FC<DevDashboardProps> = ({ currentUser, onLogou
   const handleSaveRecoveredPassword = () => {
     if (!passwordRecoveryModal) return;
     if (!recoveryNewPassword.trim()) {
-      alert('Informe a nova senha.');
+      showToast('Informe a nova senha.');
       return;
     }
     const res = resetUserPassword(passwordRecoveryModal.id, recoveryNewPassword.trim());
@@ -248,6 +255,12 @@ export const DevDashboard: React.FC<DevDashboardProps> = ({ currentUser, onLogou
 
   return (
     <div className="w-full max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-6 space-y-6">
+      {toastMsg && (
+        <div className="fixed top-20 right-4 z-50 bg-slate-900 border border-amber-500/50 text-white px-4 py-3 rounded-xl shadow-2xl flex items-center gap-3 animate-fadeIn">
+          <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+          <span className="text-xs sm:text-sm font-semibold">{toastMsg}</span>
+        </div>
+      )}
       
       {/* DEV Header Banner */}
       <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 border border-indigo-500/30 rounded-2xl p-4 sm:p-6 shadow-xl relative overflow-hidden">
@@ -267,9 +280,6 @@ export const DevDashboard: React.FC<DevDashboardProps> = ({ currentUser, onLogou
             <h1 className="text-xl sm:text-2xl lg:text-3xl font-black text-white tracking-tight font-display">
               Cadastro & Gestão de Clientes
             </h1>
-            <p className="text-xs sm:text-sm text-slate-300 mt-1 max-w-2xl leading-relaxed">
-              Módulo exclusivo de administração para cadastrar novos clientes, ativar ou desativar acessos, editar informações, excluir cadastros e recuperar senhas.
-            </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-2 sm:gap-2.5">
@@ -733,7 +743,7 @@ export const DevDashboard: React.FC<DevDashboardProps> = ({ currentUser, onLogou
                     <div className="flex items-center justify-between pt-1 border-t border-slate-800/80">
                       <span className="text-slate-400">Telefone:</span>
                       <a 
-                        href={`https://wa.me/${user.phone.replace(/\D/g, '')}`} 
+                        href={buildWhatsAppUrl(user.phone)} 
                         target="_blank" 
                         rel="noreferrer"
                         className="text-emerald-400 hover:underline flex items-center gap-1 font-mono"
@@ -798,15 +808,10 @@ export const DevDashboard: React.FC<DevDashboardProps> = ({ currentUser, onLogou
           <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-[calc(100vw-1.5rem)] sm:max-w-lg max-h-[92dvh] flex flex-col overflow-hidden shadow-2xl animate-fadeIn my-auto">
             
             <div className="p-4 sm:p-5 border-b border-slate-800 flex items-center justify-between shrink-0 bg-slate-900/90">
-              <div>
-                <h3 className="text-sm sm:text-base font-bold text-white flex items-center gap-2">
-                  <UserPlus className="w-4 h-4 text-amber-400 shrink-0" />
-                  <span>{editingUser ? 'Editar Cliente' : 'Cadastrar Novo Cliente'}</span>
-                </h3>
-                <p className="text-[11px] sm:text-xs text-slate-400 mt-0.5">
-                  Preencha os dados cadastrais e as credenciais de acesso
-                </p>
-              </div>
+              <h3 className="text-sm sm:text-base font-bold text-white flex items-center gap-2">
+                <UserPlus className="w-4 h-4 text-amber-400 shrink-0" />
+                <span>{editingUser ? 'Editar Cliente' : 'Cadastrar Novo Cliente'}</span>
+              </h3>
               <button
                 type="button"
                 onClick={() => setIsUserModalOpen(false)}
@@ -1085,21 +1090,15 @@ export const DevDashboard: React.FC<DevDashboardProps> = ({ currentUser, onLogou
                   <span>Salvar e Aplicar Nova Senha</span>
                 </button>
 
-                {passwordRecoveryModal.phone ? (
-                  <a
-                    href={`https://wa.me/${passwordRecoveryModal.phone.replace(/\D/g, '')}?text=${encodeURIComponent(getRecoveryMessage(passwordRecoveryModal, recoveryNewPassword || passwordRecoveryModal.password))}`}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="w-full py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center justify-center gap-2 transition-all shadow-md shadow-emerald-600/20 text-center cursor-pointer"
-                  >
-                    <MessageSquare className="w-4 h-4" />
-                    <span>Enviar Nova Senha pelo WhatsApp</span>
-                  </a>
-                ) : (
-                  <div className="text-[11px] text-slate-500 text-center">
-                    (Sem telefone cadastrado para envio automático via WhatsApp)
-                  </div>
-                )}
+                <a
+                  href={buildWhatsAppUrl(passwordRecoveryModal.phone, getRecoveryMessage(passwordRecoveryModal, recoveryNewPassword || passwordRecoveryModal.password))}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="w-full py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center justify-center gap-2 transition-all shadow-md shadow-emerald-600/20 text-center cursor-pointer"
+                >
+                  <MessageSquare className="w-4 h-4" />
+                  <span>Enviar Nova Senha pelo WhatsApp</span>
+                </a>
 
                 <button
                   type="button"
@@ -1243,17 +1242,15 @@ export const DevDashboard: React.FC<DevDashboardProps> = ({ currentUser, onLogou
                   )}
                 </button>
 
-                {shareUserModal.phone && (
-                  <a
-                    href={`https://wa.me/${shareUserModal.phone.replace(/\D/g, '')}?text=${encodeURIComponent(getShareMessage(shareUserModal))}`}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="w-full py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center justify-center gap-2 transition-all shadow-md shadow-emerald-600/20 text-center cursor-pointer"
-                  >
-                    <MessageSquare className="w-4 h-4" />
-                    <span>Enviar direto no WhatsApp ({shareUserModal.phone})</span>
-                  </a>
-                )}
+                <a
+                  href={buildWhatsAppUrl(shareUserModal.phone, getShareMessage(shareUserModal))}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="w-full py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center justify-center gap-2 transition-all shadow-md shadow-emerald-600/20 text-center cursor-pointer"
+                >
+                  <MessageSquare className="w-4 h-4" />
+                  <span>Enviar no WhatsApp {shareUserModal.phone ? `(${shareUserModal.phone})` : ''}</span>
+                </a>
 
                 <button
                   type="button"

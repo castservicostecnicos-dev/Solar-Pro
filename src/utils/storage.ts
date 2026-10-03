@@ -80,8 +80,12 @@ interface FirestoreSyncCallbacks {
 }
 
 let isSyncInitialized = false;
+const syncSubscribers: FirestoreSyncCallbacks[] = [];
 
 export function initFirestoreSync(callbacks?: FirestoreSyncCallbacks) {
+  if (callbacks && !syncSubscribers.includes(callbacks)) {
+    syncSubscribers.push(callbacks);
+  }
   if (isSyncInitialized) return;
   isSyncInitialized = true;
 
@@ -102,12 +106,10 @@ export function initFirestoreSync(callbacks?: FirestoreSyncCallbacks) {
       cloudProposals.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
       
       saveStoredProposals(cloudProposals);
-      if (callbacks?.onProposalsChange) {
-        callbacks.onProposalsChange(cloudProposals);
-      }
-      if (callbacks?.onSyncStatusChange) {
-        callbacks.onSyncStatusChange(true);
-      }
+      syncSubscribers.forEach((sub) => {
+        sub.onProposalsChange?.(cloudProposals);
+        sub.onSyncStatusChange?.(true);
+      });
     }, (error) => {
       console.warn('Firestore proposals onSnapshot notice:', error);
     });
@@ -129,9 +131,9 @@ export function initFirestoreSync(callbacks?: FirestoreSyncCallbacks) {
           cloudUsers.push(d.data() as AppUser);
         });
         saveStoredUsers(cloudUsers);
-        if (callbacks?.onUsersChange) {
-          callbacks.onUsersChange(cloudUsers);
-        }
+        syncSubscribers.forEach((sub) => {
+          sub.onUsersChange?.(cloudUsers);
+        });
       }
     }, (error) => {
       console.warn('Firestore users onSnapshot notice:', error);
@@ -153,9 +155,9 @@ export function initFirestoreSync(callbacks?: FirestoreSyncCallbacks) {
           cloudModules.push(d.data() as SolarModule);
         });
         saveStoredModules(cloudModules);
-        if (callbacks?.onModulesChange) {
-          callbacks.onModulesChange(cloudModules);
-        }
+        syncSubscribers.forEach((sub) => {
+          sub.onModulesChange?.(cloudModules);
+        });
       }
     }, (error) => {
       console.warn('Firestore modules onSnapshot notice:', error);
@@ -177,9 +179,9 @@ export function initFirestoreSync(callbacks?: FirestoreSyncCallbacks) {
           cloudInverters.push(d.data() as SolarInverter);
         });
         saveStoredInverters(cloudInverters);
-        if (callbacks?.onInvertersChange) {
-          callbacks.onInvertersChange(cloudInverters);
-        }
+        syncSubscribers.forEach((sub) => {
+          sub.onInvertersChange?.(cloudInverters);
+        });
       }
     }, (error) => {
       console.warn('Firestore inverters onSnapshot notice:', error);
@@ -493,6 +495,7 @@ export function authenticateUser(usernameInput: string, passwordInput: string): 
   // Localiza usuário por username ou e-mail
   const user = users.find(u => 
     u.username.toLowerCase() === normalizedInput || 
+    (u.email && u.email.toLowerCase() === normalizedInput) ||
     (u.role === 'dev' && (normalizedInput === 'dev' || normalizedInput === 'dev@castsolar.com'))
   );
 
@@ -589,12 +592,18 @@ export function saveModule(moduleData: SolarModule): SolarModule[] {
 
 export function deleteModule(identifier: string): SolarModule[] {
   const list = getStoredModules();
+  const target = list.find(m => m.id === identifier || m.model === identifier);
   const updated = list.filter(m => m.id !== identifier && m.model !== identifier);
   saveStoredModules(updated);
 
   try {
-    const modRef = doc(db, 'modules', identifier);
-    deleteDoc(modRef).catch(console.error);
+    deleteDoc(doc(db, 'modules', identifier)).catch(console.error);
+    if (target?.id && target.id !== identifier) {
+      deleteDoc(doc(db, 'modules', target.id)).catch(console.error);
+    }
+    if (target?.model) {
+      deleteDoc(doc(db, 'modules', target.model.replace(/\s+/g, '_'))).catch(console.error);
+    }
   } catch (err) {
     console.warn('Excluir módulo no Firestore:', err);
   }
@@ -661,12 +670,18 @@ export function saveInverter(inverterData: SolarInverter): SolarInverter[] {
 
 export function deleteInverter(identifier: string): SolarInverter[] {
   const list = getStoredInverters();
+  const target = list.find(i => i.id === identifier || i.model === identifier);
   const updated = list.filter(i => i.id !== identifier && i.model !== identifier);
   saveStoredInverters(updated);
 
   try {
-    const invRef = doc(db, 'inverters', identifier);
-    deleteDoc(invRef).catch(console.error);
+    deleteDoc(doc(db, 'inverters', identifier)).catch(console.error);
+    if (target?.id && target.id !== identifier) {
+      deleteDoc(doc(db, 'inverters', target.id)).catch(console.error);
+    }
+    if (target?.model) {
+      deleteDoc(doc(db, 'inverters', target.model.replace(/\s+/g, '_'))).catch(console.error);
+    }
   } catch (err) {
     console.warn('Excluir inversor no Firestore:', err);
   }
@@ -677,6 +692,18 @@ export function deleteInverter(identifier: string): SolarInverter[] {
 export function resetEquipmentToDefaults(): { modules: SolarModule[]; inverters: SolarInverter[] } {
   saveStoredModules(AVAILABLE_MODULES);
   saveStoredInverters(AVAILABLE_INVERTERS);
+  try {
+    const batch = writeBatch(db);
+    for (const m of AVAILABLE_MODULES) {
+      batch.set(doc(db, 'modules', m.id || m.model.replace(/\s+/g, '_')), sanitizeForFirestore(m));
+    }
+    for (const inv of AVAILABLE_INVERTERS) {
+      batch.set(doc(db, 'inverters', inv.id || inv.model.replace(/\s+/g, '_')), sanitizeForFirestore(inv));
+    }
+    batch.commit().catch(console.error);
+  } catch (err) {
+    console.warn('Erro ao restaurar equipamentos no Firestore:', err);
+  }
   return { modules: AVAILABLE_MODULES, inverters: AVAILABLE_INVERTERS };
 }
 

@@ -288,16 +288,38 @@ export function calculateSolarSystem(input: SizingInput): FinancialResult {
 }
 
 export function formatCurrencyBRL(value: number): string {
+  const safeVal = typeof value === 'number' && !isNaN(value) ? value : 0;
   return new Intl.NumberFormat('pt-BR', {
     style: 'currency',
     currency: 'BRL',
     minimumFractionDigits: 2,
-  }).format(value);
+  }).format(safeVal);
 }
 
 export function formatNumberBR(value: number, decimals: number = 0): string {
+  const safeVal = typeof value === 'number' && !isNaN(value) ? value : 0;
   return new Intl.NumberFormat('pt-BR', {
     minimumFractionDigits: decimals,
     maximumFractionDigits: decimals,
-  }).format(value);
+  }).format(safeVal);
+}
+
+export function buildWhatsAppUrl(phone?: string, message?: string): string {
+  const digits = (phone || '').replace(/\D/g, '');
+  let cleanPhone = '';
+  if (digits.length >= 10) {
+    cleanPhone = digits.startsWith('55') && digits.length >= 12 ? digits : `55${digits}`;
+  }
+  const query = message ? `?text=${encodeURIComponent(message)}` : '';
+  return cleanPhone ? `https://wa.me/${cleanPhone}${query}` : `https://wa.me/${query}`;
+}
+
+export function openExternalUrl(url: string): void {
+  const a = document.createElement('a');
+  a.href = url;
+  a.target = '_blank';
+  a.rel = 'noopener noreferrer';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
 }

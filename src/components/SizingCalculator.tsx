@@ -59,7 +59,8 @@ import {
 } from '../utils/solarCalculations';
 import { 
   getStoredModules, 
-  getStoredInverters 
+  getStoredInverters,
+  initFirestoreSync
 } from '../utils/storage';
 
 interface SizingCalculatorProps {
@@ -76,11 +77,16 @@ export const SizingCalculator: React.FC<SizingCalculatorProps> = ({
   const [storedModules, setStoredModules] = useState<SolarModule[]>(() => getStoredModules());
   const [storedInverters, setStoredInverters] = useState<SolarInverter[]>(() => getStoredInverters());
   const [showCostBreakdownDetails, setShowCostBreakdownDetails] = useState(false);
+  const [validationError, setValidationError] = useState<string | null>(null);
 
-  // Refresh equipment catalog on mount
+  // Refresh equipment catalog on mount and sync with Firestore
   useEffect(() => {
     setStoredModules(getStoredModules());
     setStoredInverters(getStoredInverters());
+    initFirestoreSync({
+      onModulesChange: (mods) => setStoredModules(mods),
+      onInvertersChange: (invs) => setStoredInverters(invs),
+    });
   }, []);
 
   const [formData, setFormData] = useState<SizingInput>({
@@ -226,9 +232,11 @@ export const SizingCalculator: React.FC<SizingCalculatorProps> = ({
   // Create proposal action
   const handleCreateProposal = () => {
     if (!formData.moduleModelId || !formData.inverterModelId || calculations.systemPowerKwp <= 0) {
-      alert('A proposta está limpa. Por favor, preencha os dados do sistema: selecione a placa fotovoltaica, o inversor e informe o consumo ou potência em kWp para calcular os valores antes de gerar.');
+      setValidationError('Por favor, preencha os dados obrigatórios do sistema: selecione a placa fotovoltaica, o inversor e informe o consumo ou potência em kWp para calcular os valores antes de gerar a proposta.');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
       return;
     }
+    setValidationError(null);
 
     const stateObj = BRAZILIAN_STATES_SOLAR.find(s => s.state === formData.clientState);
     const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
@@ -316,18 +324,15 @@ export const SizingCalculator: React.FC<SizingCalculatorProps> = ({
     <div className="space-y-6">
       
       {/* Page Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-sm">
         <div className="flex items-center gap-3">
-          <div className="w-12 h-12 rounded-xl bg-amber-500/10 text-amber-600 flex items-center justify-center border border-amber-500/20">
-            <Zap className="w-6 h-6" />
+          <div className="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-600 flex items-center justify-center border border-amber-500/20 shrink-0">
+            <Zap className="w-5 h-5" />
           </div>
           <div>
             <h1 className="text-xl font-bold text-slate-900 tracking-tight font-display">
               Dimensionamento & Cálculo de Economia
             </h1>
-            <p className="text-xs text-slate-500">
-              Dimensionamento fotovoltaico de alta precisão para o mercado solar brasileiro.
-            </p>
           </div>
         </div>
 
@@ -335,13 +340,32 @@ export const SizingCalculator: React.FC<SizingCalculatorProps> = ({
           type="button"
           id="btn-generate-proposal-top"
           onClick={handleCreateProposal}
-          className="flex items-center justify-center gap-2 px-5 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold rounded-xl shadow-md shadow-amber-500/20 active:scale-95 transition-all"
+          className="flex items-center justify-center gap-2 px-5 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold rounded-xl shadow-md shadow-amber-500/20 active:scale-95 transition-all cursor-pointer"
         >
           <FileCheck className="w-4 h-4" />
           <span>Gerar Proposta Oficial em PDF</span>
           <ArrowRight className="w-3.5 h-3.5" />
         </button>
       </div>
+
+      {validationError && (
+        <div className="p-4 rounded-2xl bg-rose-50 border border-rose-300 text-rose-900 flex items-start justify-between gap-3 animate-fadeIn shadow-sm">
+          <div className="flex items-start gap-2.5">
+            <AlertCircle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
+            <div>
+              <h4 className="text-xs font-bold text-rose-900">Atenção: Dados pendentes para gerar a proposta</h4>
+              <p className="text-xs text-rose-700 mt-0.5">{validationError}</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setValidationError(null)}
+            className="text-rose-500 hover:text-rose-800 text-xs font-bold px-2 py-1"
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         
@@ -511,15 +535,10 @@ export const SizingCalculator: React.FC<SizingCalculatorProps> = ({
               </div>
 
               {/* Modo de Definição pelo Técnico: kWp, Qtd Placas ou Consumo */}
-              <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-bold text-slate-800 uppercase tracking-wider">
-                    Como o Técnico vai definir o sistema?
-                  </span>
-                  <span className="text-[10px] text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200/80 font-medium">
-                    Preenchimento do Instalador
-                  </span>
-                </div>
+              <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200 space-y-2">
+                <span className="text-[11px] font-bold text-slate-800 uppercase tracking-wider block">
+                  Definição do Sistema
+                </span>
                 
                 <div className="grid grid-cols-3 gap-1.5">
                   <button
@@ -598,9 +617,6 @@ export const SizingCalculator: React.FC<SizingCalculatorProps> = ({
                     />
                     <span className="text-xs font-bold text-slate-500 whitespace-nowrap">kWp</span>
                   </div>
-                  <p className="text-[10px] text-slate-500 mt-1">
-                    Defina diretamente a potência nominal do gerador solar para esta proposta.
-                  </p>
                 </div>
               )}
 
@@ -635,9 +651,6 @@ export const SizingCalculator: React.FC<SizingCalculatorProps> = ({
                     />
                     <span className="text-xs font-bold text-slate-500 whitespace-nowrap">unidades</span>
                   </div>
-                  <p className="text-[10px] text-slate-500 mt-1">
-                    A potência em kWp será calculada automaticamente multiplicando pela potência da placa selecionada.
-                  </p>
                 </div>
               )}
 
@@ -672,9 +685,6 @@ export const SizingCalculator: React.FC<SizingCalculatorProps> = ({
                     />
                     <span className="text-xs font-bold text-slate-500 whitespace-nowrap">kWh/mês</span>
                   </div>
-                  <p className="text-[10px] text-slate-500 mt-1">
-                    O sistema compensará o consumo abatendo a taxa mínima de disponibilidade.
-                  </p>
                 </div>
               )}
 
@@ -764,10 +774,7 @@ export const SizingCalculator: React.FC<SizingCalculatorProps> = ({
             </div>
 
             {/* Pricing Mode Switch */}
-            <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200">
-              <span className="text-[11px] font-semibold text-slate-700 block mb-1.5">
-                Modo de Formação do Preço ao Cliente Final
-              </span>
+            <div className="bg-slate-50 p-2 rounded-xl border border-slate-200">
               <div className="grid grid-cols-2 gap-2">
                 <button
                   type="button"
@@ -791,7 +798,7 @@ export const SizingCalculator: React.FC<SizingCalculatorProps> = ({
                       : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
                   }`}
                 >
-                  <span>Estimativa Turnkey (R$/kWp)</span>
+                  <span>Estimativa Turnkey</span>
                 </button>
               </div>
             </div>
@@ -854,11 +861,11 @@ export const SizingCalculator: React.FC<SizingCalculatorProps> = ({
                   ) : null}
                 </div>
 
-                <div className="grid grid-cols-2 gap-2 mb-2">
+                <div className="grid grid-cols-3 gap-1.5 mb-2">
                   <button
                     type="button"
                     onClick={() => setFormData({ ...formData, inverterTypeId: 'string', inverterModelId: '' })}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
+                    className={`px-2 py-1.5 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
                       formData.inverterTypeId === 'string'
                         ? 'bg-slate-900 text-white border-slate-900'
                         : 'border-slate-200 hover:bg-slate-50 text-slate-700'
@@ -868,8 +875,19 @@ export const SizingCalculator: React.FC<SizingCalculatorProps> = ({
                   </button>
                   <button
                     type="button"
+                    onClick={() => setFormData({ ...formData, inverterTypeId: 'hibrido', inverterModelId: '' })}
+                    className={`px-2 py-1.5 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
+                      formData.inverterTypeId === 'hibrido'
+                        ? 'bg-slate-900 text-white border-slate-900'
+                        : 'border-slate-200 hover:bg-slate-50 text-slate-700'
+                    }`}
+                  >
+                    Híbrido
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => setFormData({ ...formData, inverterTypeId: 'microinversor', inverterModelId: '' })}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
+                    className={`px-2 py-1.5 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
                       formData.inverterTypeId === 'microinversor'
                         ? 'bg-slate-900 text-white border-slate-900'
                         : 'border-slate-200 hover:bg-slate-50 text-slate-700'
@@ -888,7 +906,7 @@ export const SizingCalculator: React.FC<SizingCalculatorProps> = ({
                 >
                   <option value="">-- Selecione o Inversor Solar --</option>
                   {storedInverters
-                    .filter(inv => formData.inverterTypeId === 'microinversor' ? inv.type === 'microinversor' : inv.type !== 'microinversor')
+                    .filter(inv => inv.type === formData.inverterTypeId)
                     .map((inv) => (
                       <option key={inv.id || inv.model} value={inv.model}>
                         {inv.brand} • {inv.model} ({inv.powerKw} kW • {inv.type}) {inv.unitPrice ? `• ${formatCurrencyBRL(inv.unitPrice)}` : ''}
@@ -933,14 +951,9 @@ export const SizingCalculator: React.FC<SizingCalculatorProps> = ({
                       
                       {/* Margin Percent Input */}
                       <div className="flex items-center justify-between bg-white p-2.5 rounded-lg border border-slate-200">
-                        <div>
-                          <label className="font-bold text-slate-800 block text-xs">
-                            Margem Comercial da Sua Empresa (BDI %)
-                          </label>
-                          <span className="text-[10px] text-slate-500">
-                            Lucro bruto e cobertura operacional sobre o custo direto
-                          </span>
-                        </div>
+                        <label className="font-bold text-slate-800 text-xs">
+                          Margem Comercial da Sua Empresa (BDI %)
+                        </label>
                         <div className="flex items-center gap-1.5 shrink-0">
                           <input
                             type="number"
@@ -959,11 +972,11 @@ export const SizingCalculator: React.FC<SizingCalculatorProps> = ({
                       <div className="divide-y divide-slate-200 bg-white rounded-lg border border-slate-200 overflow-hidden">
                         <div className="p-2 flex items-center justify-between font-mono text-[11px]">
                           <span className="text-slate-600">1. Módulos ({calculations.moduleQuantity} un):</span>
-                          <span className="font-bold text-slate-900">{formatCurrencyBRL(calculations.costBreakdown.modulesTotalPrice)}</span>
+                          <span className="font-bold text-slate-900">{formatCurrencyBRL(calculations.costBreakdown.modulesTotal)}</span>
                         </div>
                         <div className="p-2 flex items-center justify-between font-mono text-[11px]">
-                          <span className="text-slate-600">2. Inversor ({selectedInverter.brand}):</span>
-                          <span className="font-bold text-slate-900">{formatCurrencyBRL(calculations.costBreakdown.inverterTotalPrice)}</span>
+                          <span className="text-slate-600">2. Inversor ({selectedInverter?.brand || 'Não selecionado'}):</span>
+                          <span className="font-bold text-slate-900">{formatCurrencyBRL(calculations.costBreakdown.inverterTotal)}</span>
                         </div>
                         <div className="p-2 flex items-center justify-between font-mono text-[11px]">
                           <span className="text-slate-600">3. Estruturas (Telha {formData.roofType}):</span>
@@ -975,7 +988,7 @@ export const SizingCalculator: React.FC<SizingCalculatorProps> = ({
                         </div>
                         <div className="p-2 flex items-center justify-between font-mono text-[11px]">
                           <span className="text-slate-600">5. Mão de Obra de Instalação:</span>
-                          <span className="font-bold text-slate-900">{formatCurrencyBRL(calculations.costBreakdown.installationLaborTotal)}</span>
+                          <span className="font-bold text-slate-900">{formatCurrencyBRL(calculations.costBreakdown.installationAndLaborTotal)}</span>
                         </div>
                         <div className="p-2 flex items-center justify-between font-mono text-[11px]">
                           <span className="text-slate-600">6. Engenharia, ART & Homologação:</span>
@@ -1126,17 +1139,14 @@ export const SizingCalculator: React.FC<SizingCalculatorProps> = ({
           
           {/* Status Banner: Proposta Limpa ou Dimensionamento Pronto */}
           {calculations.systemPowerKwp === 0 ? (
-            <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 text-amber-950 flex items-start gap-3">
-              <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
-              <div>
-                <h4 className="text-xs font-bold text-amber-900">Proposta Limpa Iniciada (Sem Valores Pré-carregados)</h4>
-                <p className="text-[11px] text-amber-800 mt-0.5 leading-relaxed">
-                  Todos os dados devem ser definidos pelo instalador. Preencha a <strong>potência (kWp)</strong> ou consumo, selecione a <strong>placa solar</strong> e o <strong>inversor</strong> ao lado para calcular a proposta.
-                </p>
-              </div>
+            <div className="p-3.5 rounded-2xl bg-amber-50 border border-amber-200 text-amber-950 flex items-center gap-2.5">
+              <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+              <h4 className="text-xs font-bold text-amber-900">
+                Selecione a placa solar, o inversor e a potência ao lado para calcular a proposta.
+              </h4>
             </div>
           ) : (
-            <div className="p-3.5 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-950 flex items-center justify-between">
+            <div className="p-3 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-950 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
                 <span className="text-xs font-semibold text-emerald-900">
@@ -1144,7 +1154,7 @@ export const SizingCalculator: React.FC<SizingCalculatorProps> = ({
                 </span>
               </div>
               <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full whitespace-nowrap">
-                Calculado com Sucesso
+                Calculado
               </span>
             </div>
           )}
@@ -1236,18 +1246,12 @@ export const SizingCalculator: React.FC<SizingCalculatorProps> = ({
                 <span className="text-lg font-bold text-red-900 block mt-1">
                   {formatCurrencyBRL(calculations.currentMonthlyBill)}
                 </span>
-                <span className="text-[10px] text-red-600 block mt-0.5">
-                  Gasto contínuo para concessionária
-                </span>
               </div>
 
               <div className="p-3.5 rounded-xl bg-emerald-50/70 border border-emerald-100">
                 <span className="text-[11px] font-medium text-emerald-700 block">Nova Fatura com Solar</span>
                 <span className="text-lg font-bold text-emerald-900 block mt-1">
                   {formatCurrencyBRL(calculations.estimatedNewMonthlyBill)}
-                </span>
-                <span className="text-[10px] text-emerald-600 block mt-0.5">
-                  Apenas disponibilidade + CIP
                 </span>
               </div>
 
@@ -1256,9 +1260,6 @@ export const SizingCalculator: React.FC<SizingCalculatorProps> = ({
                 <span className="text-lg font-bold text-amber-950 block mt-1">
                   {formatCurrencyBRL(calculations.twentyFiveYearSavings)}
                 </span>
-                <span className="text-[10px] text-amber-700 block mt-0.5">
-                  Protegido contra a inflação
-                </span>
               </div>
             </div>
           </div>
@@ -1266,17 +1267,10 @@ export const SizingCalculator: React.FC<SizingCalculatorProps> = ({
           {/* Recharts: Monthly Generation vs Consumption */}
           <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
             <div className="flex items-center justify-between mb-4">
-              <div>
-                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800 flex items-center gap-2">
-                  <BarChart2 className="w-4 h-4 text-amber-600" />
-                  Curva de Geração Solar vs Consumo (12 Meses)
-                </h3>
-                <p className="text-[11px] text-slate-500">
-                  {calculations.systemPowerKwp > 0
-                    ? `Geração média mensal de ${formatNumberBR(calculations.monthlyAverageGenerationKwh)} kWh com sazonalidade solar.`
-                    : 'Aguardando preenchimento dos equipamentos para projetar a curva de geração.'}
-                </p>
-              </div>
+              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800 flex items-center gap-2">
+                <BarChart2 className="w-4 h-4 text-amber-600" />
+                Curva de Geração Solar vs Consumo (12 Meses)
+              </h3>
             </div>
 
             {calculations.systemPowerKwp > 0 ? (
@@ -1398,15 +1392,12 @@ export const SizingCalculator: React.FC<SizingCalculatorProps> = ({
           {/* Environmental Impact Banner */}
           <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200/80 flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center">
-                <Leaf className="w-5 h-5" />
+              <div className="w-9 h-9 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0">
+                <Leaf className="w-4 h-4" />
               </div>
-              <div>
-                <h4 className="text-xs font-bold text-emerald-950">Energia 100% Limpa e Renovável</h4>
-                <p className="text-[11px] text-emerald-800">
-                  Evita {calculations.co2AvoidedTonsPerYear} toneladas de CO2/ano • Equivalente ao plantio de {calculations.treesPlantedEquivalent} árvores!
-                </p>
-              </div>
+              <h4 className="text-xs font-bold text-emerald-950">
+                Energia 100% Limpa e Renovável ({calculations.co2AvoidedTonsPerYear} ton CO2/ano evitadas)
+              </h4>
             </div>
 
             <button

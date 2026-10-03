@@ -42,15 +42,24 @@ import {
   Trash2, 
   Filter, 
   CheckCircle2, 
-  Clock 
+  Clock,
+  AlertTriangle
 } from 'lucide-react';
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState<AppUser | null>(() => getCurrentSession());
   const [proposals, setProposals] = useState<SolarProposal[]>([]);
-  const [activeTab, setActiveTab] = useState<NavTabType>('crm');
+  const [activeTab, setActiveTab] = useState<NavTabType>(() => {
+    const params = new URLSearchParams(window.location.search);
+    const action = params.get('action');
+    if (action && ['calculator', 'crm', 'proposals', 'equipment', 'payments', 'reports'].includes(action)) {
+      return action as NavTabType;
+    }
+    return 'crm';
+  });
   const [selectedProposal, setSelectedProposal] = useState<SolarProposal | null>(null);
   const [followUpModalProposal, setFollowUpModalProposal] = useState<SolarProposal | null>(null);
+  const [proposalToDelete, setProposalToDelete] = useState<SolarProposal | null>(null);
   
   // Proposals List search & filter
   const [proposalsSearch, setProposalsSearch] = useState('');
@@ -131,13 +140,20 @@ export default function App() {
 
   // Delete Proposal
   const handleDeleteProposal = (proposalId: string) => {
-    if (confirm('Tem certeza que deseja excluir esta proposta?')) {
-      const updated = deleteProposal(proposalId);
-      setProposals(updated);
-      if (selectedProposal?.id === proposalId) {
-        setSelectedProposal(null);
-      }
+    const target = proposals.find(p => p.id === proposalId);
+    if (target) {
+      setProposalToDelete(target);
     }
+  };
+
+  const confirmDeleteProposal = () => {
+    if (!proposalToDelete) return;
+    const updated = deleteProposal(proposalToDelete.id);
+    setProposals(updated);
+    if (selectedProposal?.id === proposalToDelete.id) {
+      setSelectedProposal(null);
+    }
+    setProposalToDelete(null);
   };
 
   // Save Follow-up activity
@@ -279,15 +295,12 @@ export default function App() {
               <div className="space-y-6">
                 
                 {/* Header and Controls */}
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-4 sm:p-6 rounded-2xl shadow-sm border border-slate-200/80">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-4 sm:p-5 rounded-2xl shadow-sm border border-slate-200/80">
                   <div>
                     <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight font-display flex items-center gap-2">
                       <FileText className="w-6 h-6 text-amber-500" />
                       Propostas Fotovoltaicas Geradas
                     </h2>
-                    <p className="text-xs sm:text-sm text-slate-500 mt-1">
-                      Consulte, baixe PDFs timbrados, colete assinaturas ou envie mensagens no WhatsApp
-                    </p>
                   </div>
 
                   <button
@@ -321,12 +334,14 @@ export default function App() {
                       className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-700 focus:outline-none focus:border-amber-500 transition-colors cursor-pointer"
                     >
                       <option value="all">Todos os Status ({proposals.length})</option>
-                      <option value="novo">Novo</option>
-                      <option value="contato">Em Contato</option>
-                      <option value="proposta_enviada">Proposta Enviada</option>
-                      <option value="negociacao">Em Negociação</option>
-                      <option value="fechado_ganho">Fechado / Assinado</option>
-                      <option value="fechado_perdido">Perdido</option>
+                      <option value="novo_lead">1. Novo Lead</option>
+                      <option value="dimensionamento">2. Dimensionamento</option>
+                      <option value="proposta_enviada">3. Proposta Enviada</option>
+                      <option value="follow_up">4. Follow-up / Em Negociação</option>
+                      <option value="assinado">5. Proposta Assinada</option>
+                      <option value="instalacao">6. Em Instalação</option>
+                      <option value="concluido">7. Concluído</option>
+                      <option value="perdido">Perdido</option>
                     </select>
                   </div>
                 </div>
@@ -488,6 +503,44 @@ export default function App() {
           onClose={() => setFollowUpModalProposal(null)}
           onSaveFollowUp={handleSaveFollowUp}
         />
+      )}
+
+      {/* Delete Proposal Confirmation Modal */}
+      {proposalToDelete && (
+        <div className="fixed inset-0 z-50 bg-slate-950/75 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4 animate-fadeIn">
+            <div className="flex items-center gap-3">
+              <div className="w-11 h-11 rounded-xl bg-rose-50 text-rose-600 border border-rose-200 flex items-center justify-center shrink-0">
+                <AlertTriangle className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900">Excluir Proposta?</h3>
+                <p className="text-xs text-slate-500">Esta ação removerá a proposta do sistema e da nuvem</p>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-600 leading-relaxed">
+              Tem certeza que deseja excluir a proposta <strong className="text-slate-900">{proposalToDelete.proposalNumber}</strong> do cliente <strong className="text-slate-900">{proposalToDelete.client.name}</strong>?
+            </p>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setProposalToDelete(null)}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={confirmDeleteProposal}
+                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs shadow-md shadow-rose-600/20 transition-all cursor-pointer"
+              >
+                Sim, Excluir Proposta
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* PWA Universal Auto-Installer & Assistant */}

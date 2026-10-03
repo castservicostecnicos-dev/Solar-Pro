@@ -47,15 +47,8 @@ export const PWAInstallBanner: React.FC<PWAInstallBannerProps> = ({
       (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
     setIsIOS(isIosDevice);
 
-    // Auto-show banner after 1.5s if not installed and not dismissed
-    const timer = setTimeout(() => {
-      const dismissed = localStorage.getItem('solarpro_pwa_dismissed');
-      if (!checkStandalone && !dismissed) {
-        setIsBannerVisible(true);
-      }
-    }, 1500);
-
-    return () => clearTimeout(timer);
+    // Keep banner dismissed by default so it does not jump/pop up on the screen
+    setIsBannerVisible(false);
   }, []);
 
   useEffect(() => {

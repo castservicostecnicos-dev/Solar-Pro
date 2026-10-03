@@ -7,7 +7,8 @@ import {
   getStoredInverters, 
   saveInverter, 
   deleteInverter,
-  resetEquipmentToDefaults
+  resetEquipmentToDefaults,
+  initFirestoreSync
 } from '../utils/storage';
 import { formatCurrencyBRL } from '../utils/solarCalculations';
 import { 
@@ -77,9 +78,14 @@ export const EquipmentManager: React.FC<EquipmentManagerProps> = ({
 
   // Reset confirmation modal
   const [confirmResetOpen, setConfirmResetOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<{ type: 'module' | 'inverter'; item: SolarModule | SolarInverter } | null>(null);
 
   useEffect(() => {
     loadEquipment();
+    initFirestoreSync({
+      onModulesChange: (updatedModules) => setModules(updatedModules),
+      onInvertersChange: (updatedInverters) => setInverters(updatedInverters),
+    });
   }, []);
 
   const loadEquipment = () => {
@@ -118,7 +124,7 @@ export const EquipmentManager: React.FC<EquipmentManagerProps> = ({
   const handleSaveModule = (e: React.FormEvent) => {
     e.preventDefault();
     if (!moduleForm.brand || !moduleForm.model || !moduleForm.powerWp) {
-      alert('Preencha a Marca, Modelo e Potência do módulo.');
+      showFeedback('Preencha a Marca, Modelo e Potência do módulo.');
       return;
     }
 
@@ -143,11 +149,7 @@ export const EquipmentManager: React.FC<EquipmentManagerProps> = ({
   };
 
   const handleDeleteModule = (mod: SolarModule) => {
-    if (confirm(`Tem certeza que deseja excluir o módulo "${mod.model}"?`)) {
-      const updated = deleteModule(mod.id || mod.model);
-      setModules(updated);
-      showFeedback(`Módulo excluído com sucesso.`);
-    }
+    setDeleteTarget({ type: 'module', item: mod });
   };
 
   // --- INVERTER HANDLERS ---
@@ -177,7 +179,7 @@ export const EquipmentManager: React.FC<EquipmentManagerProps> = ({
   const handleSaveInverter = (e: React.FormEvent) => {
     e.preventDefault();
     if (!inverterForm.brand || !inverterForm.model || !inverterForm.powerKw) {
-      alert('Preencha a Marca, Modelo e Potência do inversor.');
+      showFeedback('Preencha a Marca, Modelo e Potência do inversor.');
       return;
     }
 
@@ -203,11 +205,21 @@ export const EquipmentManager: React.FC<EquipmentManagerProps> = ({
   };
 
   const handleDeleteInverter = (inv: SolarInverter) => {
-    if (confirm(`Tem certeza que deseja excluir o inversor "${inv.model}"?`)) {
-      const updated = deleteInverter(inv.id || inv.model);
+    setDeleteTarget({ type: 'inverter', item: inv });
+  };
+
+  const confirmDeleteEquipment = () => {
+    if (!deleteTarget) return;
+    if (deleteTarget.type === 'module') {
+      const updated = deleteModule(deleteTarget.item.id || deleteTarget.item.model);
+      setModules(updated);
+      showFeedback(`Módulo "${deleteTarget.item.model}" excluído com sucesso.`);
+    } else {
+      const updated = deleteInverter(deleteTarget.item.id || deleteTarget.item.model);
       setInverters(updated);
-      showFeedback(`Inversor excluído com sucesso.`);
+      showFeedback(`Inversor "${deleteTarget.item.model}" excluído com sucesso.`);
     }
+    setDeleteTarget(null);
   };
 
   const handleResetDefaults = () => {
@@ -245,23 +257,18 @@ export const EquipmentManager: React.FC<EquipmentManagerProps> = ({
       )}
 
       {/* Main Header Card */}
-      <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 border border-slate-700/80 rounded-2xl p-4 sm:p-6 text-white shadow-xl">
+      <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 border border-slate-700/80 rounded-2xl p-4 sm:p-5 text-white shadow-xl">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
           <div>
             <div className="flex items-center gap-2 mb-1.5">
               <span className="px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/30 text-[10px] font-bold uppercase tracking-wider">
                 Catálogo do Integrador
               </span>
-              <span className="text-xs text-slate-400">Preços Reais & Exatos</span>
             </div>
             <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-white flex items-center gap-2">
               <Package className="w-6 h-6 text-amber-400" />
               Cadastro de Equipamentos & Preços
             </h1>
-            <p className="text-xs sm:text-sm text-slate-300 mt-1 max-w-2xl leading-relaxed">
-              Cadastre e gerencie os <strong>módulos fotovoltaicos</strong> e <strong>inversores</strong> que a sua empresa utiliza.
-              Ao definir o preço unitário de cada item, o dimensionador calculará o <strong>valor exato e transparente ao cliente final</strong>.
-            </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-2 shrink-0">
@@ -648,16 +655,11 @@ export const EquipmentManager: React.FC<EquipmentManagerProps> = ({
 
       {/* SUBTAB 3: CUSTOS & REGRAS DE PRECIFICAÇÃO */}
       {activeSubTab === 'settings' && (
-        <div className="bg-white border border-slate-200 rounded-2xl p-5 sm:p-6 shadow-sm space-y-6">
-          <div>
-            <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
-              <Sliders className="w-5 h-5 text-amber-500" />
-              Como Funciona a Composição de Preço Exato
-            </h3>
-            <p className="text-xs text-slate-500 mt-1 max-w-3xl">
-              Quando você utiliza o modo de cálculo <strong>"Preço Exato por Equipamentos"</strong> no Dimensionador, o sistema soma com precisão milimétrica cada componente do kit fotovoltaico:
-            </p>
-          </div>
+        <div className="bg-white border border-slate-200 rounded-2xl p-5 sm:p-6 shadow-sm space-y-4">
+          <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+            <Sliders className="w-5 h-5 text-amber-500" />
+            Composição de Preço Exato
+          </h3>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="p-4 rounded-xl bg-slate-50 border border-slate-200">
@@ -709,15 +711,10 @@ export const EquipmentManager: React.FC<EquipmentManagerProps> = ({
             
             {/* Modal Header */}
             <div className="p-4 sm:p-5 border-b border-slate-800 flex items-center justify-between shrink-0 bg-slate-900/95">
-              <div>
-                <h3 className="text-sm sm:text-base font-bold text-white flex items-center gap-2">
-                  <Layers className="w-4 h-4 text-amber-400 shrink-0" />
-                  <span>{editingModule ? 'Editar Módulo Fotovoltaico' : 'Cadastrar Novo Módulo'}</span>
-                </h3>
-                <p className="text-[11px] sm:text-xs text-slate-400 mt-0.5">
-                  Preencha as características técnicas e o preço de custo/tabela
-                </p>
-              </div>
+              <h3 className="text-sm sm:text-base font-bold text-white flex items-center gap-2">
+                <Layers className="w-4 h-4 text-amber-400 shrink-0" />
+                <span>{editingModule ? 'Editar Módulo Fotovoltaico' : 'Cadastrar Novo Módulo'}</span>
+              </h3>
               <button
                 type="button"
                 onClick={() => setIsModuleModalOpen(false)}
@@ -803,9 +800,6 @@ export const EquipmentManager: React.FC<EquipmentManagerProps> = ({
                     className="w-full px-3.5 py-2.5 bg-slate-950 border border-emerald-500/60 rounded-xl text-sm font-bold text-emerald-300 placeholder-slate-500 focus:outline-none focus:border-emerald-400 font-mono"
                     required
                   />
-                  <span className="text-[10px] text-slate-400 block mt-1">
-                    Este valor será multiplicado pelo número de placas necessárias no projeto.
-                  </span>
                 </div>
 
                 {/* Efficiency & Warranty */}
@@ -923,15 +917,10 @@ export const EquipmentManager: React.FC<EquipmentManagerProps> = ({
             
             {/* Modal Header */}
             <div className="p-4 sm:p-5 border-b border-slate-800 flex items-center justify-between shrink-0 bg-slate-900/95">
-              <div>
-                <h3 className="text-sm sm:text-base font-bold text-white flex items-center gap-2">
-                  <Cpu className="w-4 h-4 text-amber-400 shrink-0" />
-                  <span>{editingInverter ? 'Editar Inversor' : 'Cadastrar Novo Inversor'}</span>
-                </h3>
-                <p className="text-[11px] sm:text-xs text-slate-400 mt-0.5">
-                  Informe o modelo, potência em kW e o preço unitário do equipamento
-                </p>
-              </div>
+              <h3 className="text-sm sm:text-base font-bold text-white flex items-center gap-2">
+                <Cpu className="w-4 h-4 text-amber-400 shrink-0" />
+                <span>{editingInverter ? 'Editar Inversor' : 'Cadastrar Novo Inversor'}</span>
+              </h3>
               <button
                 type="button"
                 onClick={() => setIsInverterModalOpen(false)}
@@ -1010,9 +999,6 @@ export const EquipmentManager: React.FC<EquipmentManagerProps> = ({
                     className="w-full px-3.5 py-2.5 bg-slate-950 border border-emerald-500/60 rounded-xl text-sm font-bold text-emerald-300 placeholder-slate-500 focus:outline-none focus:border-emerald-400 font-mono"
                     required
                   />
-                  <span className="text-[10px] text-slate-400 block mt-1">
-                    Valor base de custo ou revenda utilizado na composição do sistema.
-                  </span>
                 </div>
 
                 {/* Type & Voltage */}
@@ -1129,6 +1115,41 @@ export const EquipmentManager: React.FC<EquipmentManagerProps> = ({
               </div>
             </form>
 
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* CONFIRM DELETE ITEM MODAL */}
+      {/* ========================================================================= */}
+      {deleteTarget && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-rose-500/40 rounded-2xl w-full max-w-md p-5 text-white shadow-2xl animate-fadeIn">
+            <div className="flex items-center gap-3 mb-3 text-rose-400">
+              <Trash2 className="w-6 h-6 shrink-0" />
+              <h3 className="text-base font-bold">
+                Excluir {deleteTarget.type === 'module' ? 'Módulo Fotovoltaico' : 'Inversor'}?
+              </h3>
+            </div>
+            <p className="text-xs text-slate-300 leading-relaxed mb-5">
+              Tem certeza que deseja excluir <strong>{deleteTarget.item.brand} — {deleteTarget.item.model}</strong> do catálogo?
+            </p>
+            <div className="flex items-center justify-end gap-2.5">
+              <button
+                type="button"
+                onClick={() => setDeleteTarget(null)}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-300 hover:bg-slate-800"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={confirmDeleteEquipment}
+                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs"
+              >
+                Sim, Excluir
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import { SolarProposal, FollowUpActivity } from '../types';
 import { FOLLOW_UP_TEMPLATES } from '../data/solarDefaults';
-import { formatCurrencyBRL } from '../utils/solarCalculations';
+import { formatCurrencyBRL, buildWhatsAppUrl, openExternalUrl } from '../utils/solarCalculations';
 import { generateFollowUpMessage } from '../lib/solarAi';
 
 interface FollowUpModalProps {
@@ -90,10 +90,8 @@ export const FollowUpModal: React.FC<FollowUpModalProps> = ({
 
   // Launch WhatsApp
   const handleLaunchWhatsApp = () => {
-    const phone = proposal.client.phone.replace(/\D/g, '');
-    const cleanPhone = phone.startsWith('55') ? phone : `55${phone}`;
-    const url = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(customMessage)}`;
-    window.open(url, '_blank');
+    const url = buildWhatsAppUrl(proposal.client.phone, customMessage);
+    openExternalUrl(url);
 
     // Auto-record activity
     onSaveFollowUp(proposal.id, {
@@ -161,7 +159,7 @@ export const FollowUpModal: React.FC<FollowUpModalProps> = ({
           {/* Quick Cadence Templates */}
           <div>
             <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-2">
-              Selecione o Momento do Follow-up (Cadência Automatizada)
+              Momento do Follow-up
             </label>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               {FOLLOW_UP_TEMPLATES.map((tmpl) => {

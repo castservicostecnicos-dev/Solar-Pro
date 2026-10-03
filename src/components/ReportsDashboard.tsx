@@ -121,18 +121,15 @@ export const ReportsDashboard: React.FC<ReportsDashboardProps> = ({
     <div className="space-y-6">
       
       {/* Header & Export Tools */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-sm">
         <div className="flex items-center gap-3">
-          <div className="w-12 h-12 rounded-xl bg-amber-500/10 text-amber-600 flex items-center justify-center border border-amber-500/20">
-            <BarChart3 className="w-6 h-6" />
+          <div className="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-600 flex items-center justify-center border border-amber-500/20 shrink-0">
+            <BarChart3 className="w-5 h-5" />
           </div>
           <div>
             <h1 className="text-xl font-bold text-slate-900 tracking-tight font-display">
               Relatórios Executivos & Desempenho Solar
             </h1>
-            <p className="text-xs text-slate-500">
-              Análise analítica de conversão, potência instalada, faturamento e impacto ambiental.
-            </p>
           </div>
         </div>
 
@@ -202,9 +199,6 @@ export const ReportsDashboard: React.FC<ReportsDashboardProps> = ({
           <div className="text-xl font-black text-slate-900 font-display">
             {formatCurrencyBRL(stats.averageTicket)}
           </div>
-          <span className="text-[11px] text-slate-500 block mt-1">
-            por sistema instalado
-          </span>
         </div>
 
         <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
@@ -214,9 +208,6 @@ export const ReportsDashboard: React.FC<ReportsDashboardProps> = ({
           <div className="text-xl font-black text-amber-600 font-display">
             {Math.round(stats.conversionRate)}%
           </div>
-          <span className="text-[11px] text-slate-500 block mt-1">
-            Lead para Assinatura
-          </span>
         </div>
 
         <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
@@ -240,9 +231,6 @@ export const ReportsDashboard: React.FC<ReportsDashboardProps> = ({
             <span>{stats.totalCo2Avoided.toFixed(1)}</span>
             <span className="text-xs text-slate-600 font-bold">ton/ano</span>
           </div>
-          <span className="text-[11px] text-slate-500 block mt-1">
-            Impacto socioambiental
-          </span>
         </div>
 
       </div>

@@ -22,7 +22,7 @@ import {
   LogOut
 } from 'lucide-react';
 import { SolarProposal, LeadStatus, AppUser } from '../types';
-import { CRM_STAGES } from '../data/solarDefaults';
+import { CRM_STAGES, BRAZILIAN_STATES_SOLAR } from '../data/solarDefaults';
 import { formatCurrencyBRL } from '../utils/solarCalculations';
 
 interface CRMBoardProps {
@@ -177,9 +177,6 @@ export const CRMBoard: React.FC<CRMBoardProps> = ({
             <span>{totalKwp.toFixed(1)}</span>
             <span className="text-[11px] sm:text-xs font-bold text-slate-700">kWp</span>
           </div>
-          <span className="text-[10px] sm:text-[11px] text-slate-500 block mt-0.5">
-            Volume total orçado
-          </span>
         </div>
 
         <div className="bg-white p-3 sm:p-4 rounded-2xl border border-slate-200 shadow-sm">
@@ -191,9 +188,6 @@ export const CRMBoard: React.FC<CRMBoardProps> = ({
               ? `${Math.round((proposals.filter(p => p.status === 'assinado' || p.status === 'instalacao' || p.status === 'concluido').length / proposals.length) * 100)}%`
               : '0%'}
           </div>
-          <span className="text-[10px] sm:text-[11px] text-slate-500 block mt-0.5">
-            Eficiência de conversão
-          </span>
         </div>
       </div>
 
@@ -219,12 +213,11 @@ export const CRMBoard: React.FC<CRMBoardProps> = ({
             className="px-2 py-2 text-xs rounded-xl border border-slate-300 font-medium bg-white shrink-0"
           >
             <option value="all">Todos UF</option>
-            <option value="SP">SP</option>
-            <option value="MG">MG</option>
-            <option value="GO">GO</option>
-            <option value="PR">PR</option>
-            <option value="BA">BA</option>
-            <option value="RJ">RJ</option>
+            {BRAZILIAN_STATES_SOLAR.map((st) => (
+              <option key={st.state} value={st.state}>
+                {st.state}
+              </option>
+            ))}
           </select>
         </div>
 
@@ -647,9 +640,17 @@ export const CRMBoard: React.FC<CRMBoardProps> = ({
                           {formatCurrencyBRL(proposal.financial.monthlySavings)}
                         </td>
                         <td className="p-3.5">
-                          <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
-                            {currentStage?.label || proposal.status}
-                          </span>
+                          <select
+                            value={proposal.status}
+                            onChange={(e) => onUpdateStatus(proposal.id, e.target.value as LeadStatus)}
+                            className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200 cursor-pointer focus:outline-none focus:border-amber-500"
+                          >
+                            {CRM_STAGES.map((st) => (
+                              <option key={st.id} value={st.id}>
+                                {st.label}
+                              </option>
+                            ))}
+                          </select>
                         </td>
                         <td className="p-3.5 text-right">
                           <div className="flex items-center justify-end gap-1.5">

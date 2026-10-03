@@ -87,6 +87,7 @@ export const PaymentsTracker: React.FC<PaymentsTrackerProps> = ({
     const updatedInstallment: PaymentInstallment = {
       ...selectedPaymentForPay.installment,
       status: 'pago',
+      paidDate: paymentDate,
       paidAt: paymentDate,
       method: paymentMethod,
       receiptNumber: receiptNumber || `REC-${Date.now().toString().slice(-6)}`,
@@ -151,9 +152,6 @@ export const PaymentsTracker: React.FC<PaymentsTrackerProps> = ({
           <div className="text-base sm:text-xl font-black text-amber-600 font-display">
             {formatCurrencyBRL(totalPending)}
           </div>
-          <span className="text-[10px] sm:text-[11px] text-slate-500 block mt-0.5">
-            Contratos ativos
-          </span>
         </div>
 
         <div className="bg-white p-3 sm:p-4 rounded-2xl border border-slate-200 shadow-sm">
@@ -163,9 +161,6 @@ export const PaymentsTracker: React.FC<PaymentsTrackerProps> = ({
           <div className="text-base sm:text-xl font-black text-slate-900 font-display">
             {totalBilled > 0 ? `${Math.round((totalReceived / totalBilled) * 100)}%` : '0%'}
           </div>
-          <span className="text-[10px] sm:text-[11px] text-slate-500 block mt-0.5">
-            Fluxo saudável
-          </span>
         </div>
       </div>
 
@@ -261,9 +256,9 @@ export const PaymentsTracker: React.FC<PaymentsTrackerProps> = ({
                     <Calendar className="w-3.5 h-3.5 text-slate-400" />
                     <span>Vencimento: <b>{new Date(installment.dueDate).toLocaleDateString('pt-BR')}</b></span>
                   </div>
-                  {isPaid && installment.paidAt && (
+                  {isPaid && (installment.paidDate || installment.paidAt) && (
                     <span className="text-emerald-700 font-semibold">
-                      Pago em: {new Date(installment.paidAt).toLocaleDateString('pt-BR')}
+                      Pago em: {new Date((installment.paidDate || installment.paidAt)!).toLocaleDateString('pt-BR')}
                     </span>
                   )}
                 </div>

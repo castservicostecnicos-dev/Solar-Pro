@@ -121,8 +121,9 @@ export interface PaymentInstallment {
   amount: number;
   dueDate: string;
   paidDate?: string;
+  paidAt?: string;
   status: 'pendente' | 'pago' | 'atrasado';
-  method: 'pix' | 'boleto' | 'cartao' | 'financiamento';
+  method: 'pix' | 'boleto' | 'cartao' | 'financiamento' | 'ted';
   receiptNumber?: string;
   notes?: string;
 }
